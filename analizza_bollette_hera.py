@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import zipfile
 import os
 import re
@@ -7,7 +9,7 @@ import openpyxl
 from openpyxl.chart import LineChart, Reference
 import argparse
 import sys
-
+from datetime import datetime, timedelta
 
 def estrai_dati_bolletta(pdf_path):
     """Estrae i dati richiesti da una singola bolletta PDF Hera"""
@@ -57,7 +59,7 @@ def estrai_dati_bolletta(pdf_path):
 
 
 def aggiungi_grafici(excel_path):
-    """Aggiunge grafici di consumi e costi all’Excel"""
+    """Aggiunge grafici di consumi e costi all'Excel"""
     wb = openpyxl.load_workbook(excel_path)
     ws = wb.active
 
@@ -94,8 +96,6 @@ def aggiungi_grafici(excel_path):
 
     wb.save(excel_path)
     print(f"📊 Grafici aggiunti a {excel_path}")
-
-from datetime import datetime, timedelta
 
 def controlla_copertura(df):
     """Verifica se ci sono buchi temporali tra le bollette"""
