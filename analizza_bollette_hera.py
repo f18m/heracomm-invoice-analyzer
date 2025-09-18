@@ -13,6 +13,9 @@ from datetime import datetime, timedelta
 
 
 class InvoiceAnalyzer:
+
+    REGEX_PERIODO = r"Periodo: dal (\d{2}\.\d{2}\.\d{4}) al (\d{2}\.\d{2}\.\d{4})"
+
     def __init__(self, verbose: int = 0):
         self.verbose = verbose
 
@@ -25,30 +28,81 @@ class InvoiceAnalyzer:
                 print(f"⚠️ Attenzione: impossibile convertire '{s}' in float.")
             return None
 
-    def estrai_dati_bolletta(self, pdf_path: str) -> dict:
+    def estrai_dati_bolletta(self, pdf_path: str) -> list[dict]:
         """Estrae i dati richiesti da una singola bolletta PDF Hera"""
 
-        print(f"🔍 Analizzando {pdf_path}...")
+        # Ogni bolletta può essere composta da più sotto-bollette (es. luce + gas)
+        # oppure (luce + luce)
+        dati = []
+        sotto_bollette = self.__estrai_sotto_bolletta(pdf_path)
+        for sotto_bol in sotto_bollette:
+            dati_sotto_bol = self.__estrai_dati_da_sotto_bolletta(pdf_path, sotto_bol)
+            if dati_sotto_bol:
+                dati.append(dati_sotto_bol)
+        return dati
+
+    def __estrai_sotto_bolletta(self, pdf_path: str) -> list[str]:
+        """Estrae i dati richiesti da una singola bolletta PDF Hera"""
+
+        nome_file = os.path.basename(pdf_path)
+
+        print("***")
+        print(f"🔍 Inizio l'analisi di {pdf_path}...")
+
+        sotto_bollette = []
         with fitz.open(pdf_path) as doc:
             text = ""
-            for page in doc:
-                text += page.get_text()
+            for i in range(len(doc)):
+                page_text = doc[i].get_text()
 
+                # Se incontro intestazione gas → escludo
+                if "Bolletta gas" in page_text:
+                    if self.verbose > 1:
+                        print(f"💬 Escludo pagina {i} con intestazione GAS in {nome_file}")
+                    continue # skip
+                elif "Bolletta energia elettrica" not in page_text:
+                    if self.verbose > 1:
+                        print(f"💬 Escludo pagina {i} con intestazione SCONOSCIUTA in {nome_file}")
+                    continue # skip
+
+                periodo_match = re.findall(InvoiceAnalyzer.REGEX_PERIODO, page_text)
+                if len(periodo_match) == 1:
+                    # trovato un periodo, è l'inizio di una nuova sotto-bolletta,
+                    # salva il testo precedente (se esiste) come sotto-bolletta
+                    if text:
+                        sotto_bollette.append(text)
+                        text = ""
+
+                text += page_text
+
+            if text:
+                # salva l'ultima sotto-bolletta
+                sotto_bollette.append(text)
+                
         if self.verbose > 1:
-            # scrivi il testo estratto in un file di debug
-            debug_file = pdf_path.replace(".pdf", "_debug.txt")
-            print(f"💬 Testo estratto nel file di debug: {debug_file}")
-            with open(debug_file, "w", encoding="utf-8") as f:
-                f.write(text)
+            print(f"💬 Trovate {len(sotto_bollette)} sotto-bollette in {nome_file}")
+            if self.verbose > 2:
+                for i, sb in enumerate(sotto_bollette):
+                    # scrivi il testo estratto in un file di debug
+                    debug_file = pdf_path.replace(".pdf", f"_debug_{i + 1}.txt")
+                    print(f"💬 Testo sotto-bolletta {i + 1} estratto nel file di debug: {debug_file}")
+                    with open(debug_file, "w", encoding="utf-8") as f:
+                        f.write(sb)
 
-        # Nome file
+        return sotto_bollette
+
+    def __estrai_dati_da_sotto_bolletta(self, pdf_path: str, text: str) -> dict:
         nome_file = os.path.basename(pdf_path)
 
         # Periodo (inizio e fine)
-        periodo_match = re.search(r"Periodo: dal (\d{2}\.\d{2}\.\d{4}) al (\d{2}\.\d{2}\.\d{4})", text)
-        if periodo_match:
-            periodo_inizio = periodo_match.group(1)
-            periodo_fine = periodo_match.group(2)
+        periodo_match = re.findall(InvoiceAnalyzer.REGEX_PERIODO, text)
+        if len(periodo_match) > 1:
+            if self.verbose > 0:
+                print(f"⚠️ Attenzione: trovati più periodi nella bolletta {nome_file}")
+            return None  # Se troviamo più periodi, la bolletta non è valida
+        elif len(periodo_match) == 1:
+            periodo_inizio = periodo_match[0][0]
+            periodo_fine = periodo_match[0][1]
         else:
             #periodo_inizio = periodo_fine = None
             if self.verbose > 0:
@@ -56,27 +110,25 @@ class InvoiceAnalyzer:
             return None  # Se non troviamo il periodo, la bolletta non è valida
 
         # Consumi per fasce e totale
-        consumi_match = re.search(
-            r"Consumo fatturato.*?([-\d,.]+)\s+([-\d,.]+)\s+([-\d,.]+)\s*kWh", text
-        )
+        consumi_regex = [
+            r"Consumo fatturato.*?([-\d,.]+)\s+([-\d,.]+)\s+([-\d,.]+)\s*kWh",
+            # Alcune volte il formato è leggermente diverso... proviamo con una regex alternativa
+            r"Consumo fatturato\s\(Chilowatt orari\)\n([-\d,.]+)\n([-\d,.]+)\n([-\d,.]+)\s*kWh"
+        ]
+        consumi_match = None
+        for regex in consumi_regex:
+            consumi_match = re.search(regex, text)
+            if consumi_match:
+                break
+
         if consumi_match:
             consumo_f1 = self.__italian_number_to_float_safe(consumi_match.group(1))
             consumo_f23 = self.__italian_number_to_float_safe(consumi_match.group(2))
             consumo_tot = self.__italian_number_to_float_safe(consumi_match.group(3))
         else:
-            # Alcune volte il formato è leggermente diverso... proviamo con una regex alternativa
-            consumi_match = re.search(
-                r"Consumo fatturato\s\(Chilowatt orari\)\n([-\d,.]+)\n([-\d,.]+)\n([-\d,.]+)\s*kWh", text
-        )
-            if consumi_match:
-                consumo_f1 = self.__italian_number_to_float_safe(consumi_match.group(1))
-                consumo_f23 = self.__italian_number_to_float_safe(consumi_match.group(2))
-                consumo_tot = self.__italian_number_to_float_safe(consumi_match.group(3))
-            else:
-                #consumo_f1 = consumo_f23 = consumo_tot = None
-                if self.verbose > 0:
-                    print(f"⚠️ Attenzione: impossibile trovare i consumi nella bolletta {nome_file}.")
-                return None  # Se non troviamo i consumi, la bolletta non è valida
+            if self.verbose > 0:
+                print(f"⚠️ Attenzione: impossibile trovare i consumi nella bolletta {nome_file}.")
+            return None  # Se non troviamo i consumi, la bolletta non è valida
 
         # Totale energia elettrica (escludendo gas e altri servizi)
         elettricita_match = re.search(r"Totale bolletta/contratto\s+([\d,]+)", text)
@@ -87,6 +139,9 @@ class InvoiceAnalyzer:
             if self.verbose > 0:
                 print(f"⚠️ Attenzione: impossibile trovare il totale energia nella bolletta {nome_file}.")
             return None  # Se non troviamo il totale, la bolletta non è valida
+
+        if self.verbose > 1:
+            print(f"💬 Bolletta {nome_file}: Periodo {periodo_inizio} - {periodo_fine}, Consumi F1={consumo_f1} kWh, F2+F3={consumo_f23} kWh, Totale={consumo_tot} kWh, Costo={totale_elettricita} €")
 
         return {
             "File": nome_file,
@@ -197,7 +252,8 @@ def main():
     for pdf_path in pdf_list:
         dati = x.estrai_dati_bolletta(pdf_path)
         if dati:
-            dati_bollette.append(dati)
+            for d in dati:
+                dati_bollette.append(d)
 
     if not dati_bollette:
         print("❌ Nessun PDF analizzato correttamente.")
