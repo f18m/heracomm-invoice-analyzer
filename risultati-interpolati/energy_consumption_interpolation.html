@@ -187,6 +187,12 @@
             <div class="control-group">
                 <button class="export-btn" onclick="exportToCSV()">📥 Esporta CSV</button>
             </div>
+            
+            <div class="control-group">
+                <div id="currentWeekInfo" style="background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; padding: 12px 20px; border-radius: 25px; font-weight: bold; text-align: center; min-width: 200px;">
+                    <!-- Info settimana corrente sarà popolata dinamicamente -->
+                </div>
+            </div>
         </div>
         
         <div class="stats" id="stats">
@@ -243,10 +249,130 @@
             return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
         }
 
-        // Funzione per calcolare i giorni tra due date
-        function daysBetween(date1, date2) {
-            const oneDay = 24 * 60 * 60 * 1000;
-            return Math.round(Math.abs((date2 - date1) / oneDay)) + 1;
+        // Funzione per calcolare la settimana dell'anno ISO 8601
+        function getISOWeek(date) {
+            const target = new Date(date.valueOf());
+            const dayNumber = (date.getUTCDay() + 6) % 7;
+            target.setUTCDate(target.getUTCDate() - dayNumber + 3);
+            const firstThursday = target.valueOf();
+            target.setUTCMonth(0, 1);
+            if (target.getUTCDay() !== 4) {
+                target.setUTCMonth(0, 1 + ((4 - target.getUTCDay()) + 7) % 7);
+            }
+            return 1 + Math.ceil((firstThursday - target) / 604800000);
+        }
+
+        // Funzione per aggiornare le informazioni della settimana corrente
+        function updateCurrentWeekInfo() {
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentWeek = getISOWeek(now);
+            
+            // Trova l'inizio e la fine della settimana corrente
+            const startOfWeek = new Date(now);
+            const dayOfWeek = now.getDay();
+            const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Lunedì
+            startOfWeek.setDate(diff);
+            startOfWeek.setHours(0, 0, 0, 0);
+            
+            const endOfWeek = new Date(startOfWeek);
+            endOfWeek.setDate(startOfWeek.getDate() + 6);
+            endOfWeek.setHours(23, 59, 59, 999);
+            
+            // Verifica se l'anno corrente è disponibile nella selezione
+            const yearSelect = document.getElementById('yearSelect');
+            const availableYears = Array.from(yearSelect.options).map(option => parseInt(option.value));
+            const hasCurrentYear = availableYears.includes(currentYear);
+            
+            let weekInfo = `📅 Settimana ${currentWeek}/${currentYear}`;
+            let additionalInfo = '';
+            
+            if (hasCurrentYear) {
+                // Se abbiamo dati per l'anno corrente, mostra il consumo stimato
+                const currentYearData = generateWeeklyData(currentYear);
+                const currentWeekData = currentYearData.find(week => week.week === currentWeek);
+                
+                if (currentWeekData) {
+                    additionalInfo = `<br><small>Consumo stimato: ${currentWeekData.total.toFixed(1)} kWh (${currentWeekData.dailyAvg.toFixed(1)} kWh/giorno)</small>`;
+                }
+                
+                // Evidenzia l'anno corrente se non è già selezionato
+                if (parseInt(yearSelect.value) !== currentYear) {
+                    yearSelect.style.boxShadow = '0 0 10px rgba(231, 76, 60, 0.5)';
+                    yearSelect.style.borderColor = '#e74c3c';
+                } else {
+                    yearSelect.style.boxShadow = '';
+                    yearSelect.style.borderColor = '#3498db';
+                }
+            }
+            
+            const currentWeekElement = document.getElementById('currentWeekInfo');
+            currentWeekElement.innerHTML = `
+                ${weekInfo}
+                <br><small>${startOfWeek.toLocaleDateString('it-IT')} - ${endOfWeek.toLocaleDateString('it-IT')}</small>
+                ${additionalInfo}
+            `;
+            
+            // Aggiungi effetto pulsante se è disponibile l'anno corrente
+            if (hasCurrentYear) {
+                currentWeekElement.style.cursor = 'pointer';
+                currentWeekElement.onclick = function() {
+                    yearSelect.value = currentYear.toString();
+                    yearSelect.dispatchEvent(new Event('change'));
+                    highlightCurrentWeek(currentYear, currentWeek);
+                };
+                currentWeekElement.title = `Clicca per visualizzare i dati del ${currentYear}`;
+            } else {
+                currentWeekElement.style.cursor = 'default';
+                currentWeekElement.onclick = null;
+                currentWeekElement.title = `Anno ${currentYear} non disponibile nei dati`;
+            }
+        }
+
+        // Funzione per evidenziare la settimana corrente nel grafico e nella tabella
+        function highlightCurrentWeek(year, weekNumber) {
+            const now = new Date();
+            if (now.getFullYear() !== year) return;
+            
+            // Evidenzia nella tabella
+            const tableRows = document.querySelectorAll('#dataTableBody tr');
+            tableRows.forEach((row, index) => {
+                const weekCell = row.cells[0];
+                if (parseInt(weekCell.textContent) === weekNumber) {
+                    row.style.background = 'linear-gradient(135deg, #e74c3c, #c0392b)';
+                    row.style.color = 'white';
+                    row.style.fontWeight = 'bold';
+                    row.style.transform = 'scale(1.02)';
+                    
+                    // Scroll alla riga evidenziata
+                    setTimeout(() => {
+                        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 500);
+                } else {
+                    row.style.background = '';
+                    row.style.color = '';
+                    row.style.fontWeight = '';
+                    row.style.transform = '';
+                }
+            });
+            
+            // Aggiorna il grafico con evidenziazione
+            if (chart) {
+                const currentWeekIndex = weekNumber - 1;
+                if (currentWeekIndex >= 0 && currentWeekIndex < chart.data.datasets[0].data.length) {
+                    // Crea array di colori per evidenziare la settimana corrente
+                    const pointColors = chart.data.datasets[0].data.map((_, index) => 
+                        index === currentWeekIndex ? '#e74c3c' : chart.data.datasets[0].borderColor
+                    );
+                    const pointSizes = chart.data.datasets[0].data.map((_, index) => 
+                        index === currentWeekIndex ? 10 : 5
+                    );
+                    
+                    chart.data.datasets[0].pointBackgroundColor = pointColors;
+                    chart.data.datasets[0].pointRadius = pointSizes;
+                    chart.update('none');
+                }
+            }
         }
 
         // Elaborazione dati per normalizzare a consumi giornalieri
@@ -366,6 +492,12 @@
             return weeks;
         }
 
+        // Funzione per calcolare i giorni tra due date
+        function daysBetween(date1, date2) {
+            const oneDay = 24 * 60 * 60 * 1000;
+            return Math.round(Math.abs((date2 - date1) / oneDay)) + 1;
+        }
+
         let currentData = generateWeeklyData(2023);
         let chart = null;
 
@@ -453,6 +585,11 @@
                     label = 'Consumo F2+F3 (kWh)';
                     color = 'rgb(54, 162, 235)';
                     break;
+                case 'daily':
+                    values = data.map(week => week.dailyAvg);
+                    label = 'Consumo Giornaliero Medio (kWh/giorno)';
+                    color = 'rgb(255, 159, 64)';
+                    break;
                 default:
                     values = data.map(week => week.total);
                     label = 'Consumo Totale (kWh)';
@@ -499,7 +636,7 @@
                             beginAtZero: true,
                             title: {
                                 display: true,
-                                text: 'kWh',
+                                text: metric === 'daily' ? 'kWh/giorno' : 'kWh',
                                 font: {
                                     weight: 'bold'
                                 }
@@ -541,12 +678,22 @@
             updateStats(currentData);
             updateTable(currentData);
             updateChart(currentData, metric);
+            
+            // Se è l'anno corrente, evidenzia la settimana corrente
+            const now = new Date();
+            if (selectedYear === now.getFullYear()) {
+                const currentWeek = getISOWeek(now);
+                setTimeout(() => highlightCurrentWeek(selectedYear, currentWeek), 300);
+            }
         });
 
         document.getElementById('metricSelect').addEventListener('change', function() {
             const metric = this.value;
             updateChart(currentData, metric);
         });
+
+        // Aggiorna le informazioni della settimana corrente ogni minuto
+        setInterval(updateCurrentWeekInfo, 60000);
 
         // Funzione per esportare in CSV
         function exportToCSV() {
@@ -569,6 +716,7 @@
         }
 
         // Inizializzazione
+        updateCurrentWeekInfo();
         updateStats(currentData);
         updateTable(currentData);
         updateChart(currentData, 'total');
