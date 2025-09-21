@@ -217,6 +217,7 @@ def main():
     parser.add_argument("input_path", help="Percorso di un file ZIP di bollette o di una cartella contenente PDF")
     parser.add_argument("-o", "--output", default="bollette_hera_riepilogo.xlsx", help="Nome del file Excel di output")
     parser.add_argument("--verbose", type=int, help="Enable verbose output", default=0)
+    parser.add_argument("--grafici", type=int, help="Aggiungi grafici nell'output", default=0)
     args = parser.parse_args()
 
     input_path = args.input_path
@@ -275,7 +276,8 @@ def main():
        
         
     # Aggiunta grafici
-    x.aggiungi_grafici(output_excel)
+    if args.grafici:
+        x.aggiungi_grafici(output_excel)
 
 
 if __name__ == "__main__":
