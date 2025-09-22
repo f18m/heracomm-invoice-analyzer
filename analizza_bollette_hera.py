@@ -173,6 +173,12 @@ class InvoiceAnalyzer:
 
 class Tools:
 
+    def crea_csv(self, dati_bollette: list[dict], csv_path: str) -> None:
+        # Creazione DataFrame e salvataggio CSV
+        df = pd.DataFrame(dati_bollette)
+        df.to_csv(csv_path, index=False)
+        print(f"✅ File CSV creato: {csv_path}")
+
     def crea_excel(self, dati_bollette: list[dict], excel_path: str) -> None:
         # Creazione DataFrame e salvataggio Excel
         df = pd.DataFrame(dati_bollette)
@@ -248,7 +254,7 @@ class Tools:
             periodo_fine = dati["Periodo Fine"].strftime("%Y%m%d")
             anno = dati["Periodo Inizio"].year
             mese = dati["Periodo Inizio"].month
-            nuovo_nome = f"{curr_path}/elettricita_{anno}_{mese}_{periodo_inizio}_{periodo_fine}.pdf"
+            nuovo_nome = f"{curr_path}/elettricita_{anno}_{mese:02}_{periodo_inizio}_{periodo_fine}.pdf"
 
             if dati["File"] in temp_dict:
                 temp_dict[dati["File"]]["count"] += 1
@@ -275,14 +281,15 @@ class Tools:
 def main():
     parser = argparse.ArgumentParser(description="Estrai dati dalle bollette Hera e crea un Excel riepilogativo con grafici.")
     parser.add_argument("input_path", help="Percorso di un file ZIP di bollette o di una cartella contenente PDF")
-    parser.add_argument("-o", "--output", default="bollette_hera_riepilogo.xlsx", help="Nome del file Excel di output")
+    parser.add_argument("--output-csv", default="bollette_hera_riepilogo.csv", help="Nome del file CSV di output")
+    parser.add_argument("--output-excel", default="bollette_hera_riepilogo.xlsx", help="Nome del file Excel di output")
     parser.add_argument("--verbose", type=int, help="Enable verbose output", default=0)
     parser.add_argument("--grafici", help="Aggiungi grafici nell'output", action='store_true')
     parser.add_argument("--rinomina",  help="Rinomina i files PDF con un formato human-friendly", action='store_true')
     args = parser.parse_args()
 
     input_path = args.input_path
-    output_excel = args.output
+    
 
     pdf_list = []
 
@@ -327,11 +334,14 @@ def main():
     if args.rinomina:
         t.rinomina_pdfs(dati_bollette)
 
-    if args.output:
-        t.crea_excel(dati_bollette, output_excel)
+    if args.output_csv:
+        t.crea_csv(dati_bollette, args.output_csv)
+
+    if args.output_excel:
+        t.crea_excel(dati_bollette, args.output_excel)
         # Aggiunta grafici
         if args.grafici:
-            t.aggiungi_grafici(output_excel)
+            t.aggiungi_grafici(args.output_excel)
 
     if len(dati_bollette) > 1:
         buchi = t.controlla_copertura(dati_bollette)
