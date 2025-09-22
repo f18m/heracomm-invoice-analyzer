@@ -15,6 +15,8 @@ from datetime import datetime, timedelta
 class InvoiceAnalyzer:
 
     REGEX_PERIODO = r"Periodo: dal (\d{2}\.\d{2}\.\d{4}) al (\d{2}\.\d{2}\.\d{4})"
+    INTESTAZIONE_BOLLETTA_ELETTRICA = "Bolletta energia elettrica"
+    INTESTAZIONE_BOLLETTA_GAS = "Bolletta gas"
 
     def __init__(self, verbose: int = 0):
         self.verbose = verbose
@@ -45,11 +47,11 @@ class InvoiceAnalyzer:
                 page_text = doc[i].get_text()
 
                 # Se incontro intestazione gas → escludo
-                if "Bolletta gas" in page_text:
+                if InvoiceAnalyzer.INTESTAZIONE_BOLLETTA_GAS in page_text:
                     if self.verbose > 1:
                         print(f"💬 Escludo pagina {i} con intestazione GAS in {nome_file}")
                     continue # skip
-                elif "Bolletta energia elettrica" not in page_text:
+                elif InvoiceAnalyzer.INTESTAZIONE_BOLLETTA_ELETTRICA not in page_text:
                     if self.verbose > 1:
                         print(f"💬 Escludo pagina {i} con intestazione SCONOSCIUTA in {nome_file}")
                     continue # skip
