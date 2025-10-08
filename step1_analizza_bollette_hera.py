@@ -283,6 +283,7 @@ def main():
     parser.add_argument("input_path", help="Percorso di un file ZIP di bollette o di una cartella contenente PDF")
     parser.add_argument("--output-csv", default="bollette_hera_riepilogo.csv", help="Nome del file CSV di output")
     parser.add_argument("--output-excel", default="bollette_hera_riepilogo.xlsx", help="Nome del file Excel di output")
+    parser.add_argument("--output-summary", default="yearly", help="Scrivi in output un sommario in formato testuale", choices=["detailed", "yearly", "none"])
     parser.add_argument("--verbose", type=int, help="Enable verbose output", default=0)
     parser.add_argument("--grafici", help="Aggiungi grafici nell'output", action='store_true')
     parser.add_argument("--rinomina",  help="Rinomina i files PDF con un formato human-friendly", action='store_true')
@@ -351,7 +352,23 @@ def main():
                 print(f"   - dal {inizio.date()} al {fine.date()}")
         else:
             print("✅ Nessun buco temporale: le bollette coprono l'intero periodo senza interruzioni.")
-       
+
+    if args.output_summary == "detailed":
+        # Stampa un sommario testuale
+        df = pd.DataFrame(dati_bollette)
+        df = df.sort_values("Periodo Inizio").reset_index(drop=True)
+        print("\n📄 Sommario Bollette:")
+        print(df[["Periodo Inizio", "Periodo Fine", "Consumo Totale (kWh)", "Totale Energia (€)"]].to_string(index=False))       
+    elif args.output_summary == "yearly":
+        # Stampa un sommario annuale
+        df = pd.DataFrame(dati_bollette)
+        df["Anno"] = df["Periodo Inizio"].dt.year
+        summary = df.groupby("Anno").agg({
+            "Consumo Totale (kWh)": "sum",
+            "Totale Energia (€)": "sum"
+        }).reset_index()
+        print("\n📄 Sommario Annuale Bollette:")
+        print(summary.to_string(index=False))
 
 if __name__ == "__main__":
     main()
