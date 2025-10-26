@@ -287,14 +287,17 @@ class Tools:
             else:
                 print(f"ℹ️ Il file {old_name} ha già il nome corretto.")
 
-    def genera_sommario(self, summary_type: str) -> None:
+    def genera_sommario(self, summary_type: str, summary_format: str) -> None:
         """Genera un sommario testuale delle bollette analizzate."""
         if summary_type == "detailed":
             # Stampa un sommario testuale
             df = pd.DataFrame(self.dati_bollette)
             df = df.sort_values("Periodo Inizio").reset_index(drop=True)
             print("\n📄 Sommario Bollette:")
-            print(df[["Periodo Inizio", "Periodo Fine", "Consumo Totale (kWh)", "Totale Energia (€)", "Numero Giorni"]].to_string(index=False))
+            if summary_format == "html":
+                print(df.to_html(index=False))
+            else:
+                print(df[["Periodo Inizio", "Periodo Fine", "Consumo Totale (kWh)", "Totale Energia (€)", "Numero Giorni"]].to_string(index=False))
         elif summary_type == "yearly":
             # Stampa un sommario annuale
             df = pd.DataFrame(self.dati_bollette)
@@ -306,15 +309,18 @@ class Tools:
             }).reset_index()
 
             print("\n📄 Sommario Annuale Bollette:")
-            #print(summary.to_html(index=False))
-            print(summary.to_string(index=False))
+            if summary_format == "html":
+                print(summary.to_html(index=False))
+            else:
+                print(summary.to_string(index=False))
     
 def main():
     parser = argparse.ArgumentParser(description="Estrai dati dalle bollette Hera e crea un Excel riepilogativo con grafici.")
     parser.add_argument("input_path", help="Percorso di un file ZIP di bollette o di una cartella contenente PDF")
     parser.add_argument("--output-csv", default="bollette_hera_riepilogo.csv", help="Nome del file CSV di output")
     parser.add_argument("--output-excel", default="bollette_hera_riepilogo.xlsx", help="Nome del file Excel di output")
-    parser.add_argument("--output-summary", default="yearly", help="Scrivi in output un sommario in formato testuale", choices=["detailed", "yearly", "none"])
+    parser.add_argument("--output-summary", default="yearly", help="Scrivi in output un sommario su base annuale, o più dettagliata", choices=["detailed", "yearly", "none"])
+    parser.add_argument("--summary-format", default="text", help="Formato del sommario", choices=["text", "html"])
     parser.add_argument("--verbose", type=int, help="Enable verbose output", default=0)
     parser.add_argument("--grafici", help="Aggiungi grafici nell'output", action='store_true')
     parser.add_argument("--rinomina",  help="Rinomina i files PDF con un formato human-friendly", action='store_true')
@@ -385,7 +391,7 @@ def main():
             print("✅ Nessun buco temporale: le bollette coprono l'intero periodo senza interruzioni.")
 
     if args.output_summary != "none":
-        t.genera_sommario(args.output_summary)
+        t.genera_sommario(args.output_summary, args.summary_format)
 
 if __name__ == "__main__":
     main()
