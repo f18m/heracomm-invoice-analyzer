@@ -103,6 +103,12 @@ class InvoiceAnalyzer:
                     print(f"⚠️ Attenzione: formato data non valido nella bolletta {nome_file}.")
                 return None
 
+            numero_giorni = (periodo_fine - periodo_inizio).days + 1
+            if numero_giorni < 1:
+                if self.verbose > 0:
+                    print(f"⚠️ Attenzione: periodo non valido ({periodo_inizio_str} - {periodo_fine_str}) nella bolletta {nome_file}.")
+                return None
+
         else:
             #periodo_inizio = periodo_fine = None
             if self.verbose > 0:
@@ -141,12 +147,13 @@ class InvoiceAnalyzer:
             return None  # Se non troviamo il totale, la bolletta non è valida
 
         if self.verbose > 1:
-            print(f"💬 Bolletta {nome_file}: Periodo {periodo_inizio} - {periodo_fine}, Consumi F1={consumo_f1} kWh, F2+F3={consumo_f23} kWh, Totale={consumo_tot} kWh, Costo={totale_elettricita} €")
+            print(f"💬 Bolletta {nome_file}: Periodo {periodo_inizio} - {periodo_fine} ({numero_giorni} giorni), Consumi F1={consumo_f1} kWh, F2+F3={consumo_f23} kWh, Totale={consumo_tot} kWh, Costo={totale_elettricita} €")
 
         return {
             "File": pdf_path, # string
             "Periodo Inizio": periodo_inizio, # datetime
             "Periodo Fine": periodo_fine, # datetime 
+            "Numero Giorni": numero_giorni, # int
             "Consumo F1 (kWh)": consumo_f1, # float
             "Consumo F2+F3 (kWh)": consumo_f23, # float
             "Consumo Totale (kWh)": consumo_tot, # float
@@ -173,15 +180,19 @@ class InvoiceAnalyzer:
 
 class Tools:
 
-    def crea_csv(self, dati_bollette: list[dict], csv_path: str) -> None:
+    def __init__(self, dati_bollette: list[dict], verbose: int = 0):
+        self.dati_bollette = dati_bollette
+        self.verbose = verbose
+
+    def crea_csv(self, csv_path: str) -> None:
         # Creazione DataFrame e salvataggio CSV
-        df = pd.DataFrame(dati_bollette)
+        df = pd.DataFrame(self.dati_bollette)
         df.to_csv(csv_path, index=False)
         print(f"✅ File CSV creato: {csv_path}")
 
-    def crea_excel(self, dati_bollette: list[dict], excel_path: str) -> None:
+    def crea_excel(self, excel_path: str) -> None:
         # Creazione DataFrame e salvataggio Excel
-        df = pd.DataFrame(dati_bollette)
+        df = pd.DataFrame(self.dati_bollette)
         df.to_excel(excel_path, index=False)
         print(f"✅ File Excel creato: {excel_path}")
 
@@ -224,10 +235,10 @@ class Tools:
         wb.save(excel_path)
         print(f"📊 Grafici aggiunti a {excel_path}")
 
-    def controlla_copertura(self, dati_sottobollette: list[dict]) -> list[tuple[datetime, datetime]]:
+    def controlla_copertura(self) -> list[tuple[datetime, datetime]]:
         """Verifica se ci sono buchi temporali tra le bollette"""
 
-        df = pd.DataFrame(dati_sottobollette)
+        df = pd.DataFrame(self.dati_bollette)
         df["Periodo Inizio"] = pd.to_datetime(df["Periodo Inizio"], format="%d.%m.%Y")
         df["Periodo Fine"] = pd.to_datetime(df["Periodo Fine"], format="%d.%m.%Y")
 
@@ -244,10 +255,10 @@ class Tools:
 
         return gaps
 
-    def rinomina_pdfs(self, dati_sottobollette: list[dict]) -> None:
+    def rinomina_pdfs(self) -> None:
         """Rinomina i file PDF delle bollette in base ai dati estratti."""
         temp_dict = {}
-        for dati in dati_sottobollette:
+        for dati in self.dati_bollette:
             curr_path = os.path.dirname(dati["File"])
             old_name = os.path.basename(dati["File"])
             periodo_inizio = dati["Periodo Inizio"].strftime("%Y%m%d")
@@ -276,8 +287,28 @@ class Tools:
             else:
                 print(f"ℹ️ Il file {old_name} ha già il nome corretto.")
 
+    def genera_sommario(self, summary_type: str) -> None:
+        """Genera un sommario testuale delle bollette analizzate."""
+        if summary_type == "detailed":
+            # Stampa un sommario testuale
+            df = pd.DataFrame(self.dati_bollette)
+            df = df.sort_values("Periodo Inizio").reset_index(drop=True)
+            print("\n📄 Sommario Bollette:")
+            print(df[["Periodo Inizio", "Periodo Fine", "Consumo Totale (kWh)", "Totale Energia (€)", "Numero Giorni"]].to_string(index=False))
+        elif summary_type == "yearly":
+            # Stampa un sommario annuale
+            df = pd.DataFrame(self.dati_bollette)
+            df["Anno"] = df["Periodo Inizio"].dt.year
+            summary = df.groupby("Anno").agg({
+                "Consumo Totale (kWh)": "sum",
+                "Totale Energia (€)": "sum",
+                "Numero Giorni": "sum"
+            }).reset_index()
 
-
+            print("\n📄 Sommario Annuale Bollette:")
+            #print(summary.to_html(index=False))
+            print(summary.to_string(index=False))
+    
 def main():
     parser = argparse.ArgumentParser(description="Estrai dati dalle bollette Hera e crea un Excel riepilogativo con grafici.")
     parser.add_argument("input_path", help="Percorso di un file ZIP di bollette o di una cartella contenente PDF")
@@ -329,23 +360,23 @@ def main():
         print("❌ Nessun PDF analizzato correttamente.")
         sys.exit(1)
 
-    t = Tools()
+    t = Tools(dati_bollette)
 
     # Rinomina dei PDF
     if args.rinomina:
-        t.rinomina_pdfs(dati_bollette)
+        t.rinomina_pdfs()
 
     if args.output_csv:
-        t.crea_csv(dati_bollette, args.output_csv)
+        t.crea_csv(args.output_csv)
 
     if args.output_excel:
-        t.crea_excel(dati_bollette, args.output_excel)
+        t.crea_excel(args.output_excel)
         # Aggiunta grafici
         if args.grafici:
             t.aggiungi_grafici(args.output_excel)
 
     if len(dati_bollette) > 1:
-        buchi = t.controlla_copertura(dati_bollette)
+        buchi = t.controlla_copertura()
         if buchi:
             print("⚠️ Trovati periodi non coperti:")
             for inizio, fine in buchi:
@@ -353,22 +384,8 @@ def main():
         else:
             print("✅ Nessun buco temporale: le bollette coprono l'intero periodo senza interruzioni.")
 
-    if args.output_summary == "detailed":
-        # Stampa un sommario testuale
-        df = pd.DataFrame(dati_bollette)
-        df = df.sort_values("Periodo Inizio").reset_index(drop=True)
-        print("\n📄 Sommario Bollette:")
-        print(df[["Periodo Inizio", "Periodo Fine", "Consumo Totale (kWh)", "Totale Energia (€)"]].to_string(index=False))       
-    elif args.output_summary == "yearly":
-        # Stampa un sommario annuale
-        df = pd.DataFrame(dati_bollette)
-        df["Anno"] = df["Periodo Inizio"].dt.year
-        summary = df.groupby("Anno").agg({
-            "Consumo Totale (kWh)": "sum",
-            "Totale Energia (€)": "sum"
-        }).reset_index()
-        print("\n📄 Sommario Annuale Bollette:")
-        print(summary.to_string(index=False))
+    if args.output_summary != "none":
+        t.genera_sommario(args.output_summary)
 
 if __name__ == "__main__":
     main()
