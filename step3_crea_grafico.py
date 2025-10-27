@@ -329,7 +329,7 @@ html_template = '''
                     font: { size: 24, color: '#2d3748' }
                 },
                 xaxis: {
-                    title: 'Settimana dell\'Anno',
+                    title: 'Settimana',
                     gridcolor: '#e2e8f0',
                     tickmode: 'linear',
                     tick0: 1,
