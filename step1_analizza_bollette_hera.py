@@ -299,20 +299,25 @@ class Tools:
             else:
                 print(df[["Periodo Inizio", "Periodo Fine", "Consumo Totale (kWh)", "Totale Energia (€)", "Numero Giorni"]].to_string(index=False))
         elif summary_type == "yearly":
-            # Stampa un sommario annuale
-            df = pd.DataFrame(self.dati_bollette)
-            df["Anno"] = df["Periodo Inizio"].dt.year
-            summary = df.groupby("Anno").agg({
-                "Consumo Totale (kWh)": "sum",
-                "Totale Energia (€)": "sum",
-                "Numero Giorni": "sum"
-            }).reset_index()
+            print("⚠️ Avviso: il sommario annuale è stato disabilitato in questo step. Usa lo step2_interpolazione.py per un sommario accurato.")
+        # il sommario annuale implementato sotto è molto IMPRECISO a causa delle bollette
+        # che possono coprire periodi che attraversano più anni.
+        # Lo step2 di interpolazione creerà un sommario più accurato.
+        # elif summary_type == "yearly":
+        #     # Stampa un sommario annuale
+        #     df = pd.DataFrame(self.dati_bollette)
+        #     df["Anno"] = df["Periodo Inizio"].dt.year
+        #     summary = df.groupby("Anno").agg({
+        #         "Consumo Totale (kWh)": "sum",
+        #         "Totale Energia (€)": "sum",
+        #         "Numero Giorni": "sum"
+        #     }).reset_index()
 
-            print("\n📄 Sommario Annuale Bollette:")
-            if summary_format == "html":
-                print(summary.to_html(index=False))
-            else:
-                print(summary.to_string(index=False))
+        #     print("\n📄 Sommario Annuale Bollette:")
+        #     if summary_format == "html":
+        #         print(summary.to_html(index=False))
+        #     else:
+        #         print(summary.to_string(index=False))
     
 def main():
     parser = argparse.ArgumentParser(description="Estrai dati dalle bollette Hera e crea un Excel riepilogativo con grafici.")

@@ -213,7 +213,46 @@ def process_all_years(df: pd.DataFrame):
             results.append(weekly_data)
     #return pd.DataFrame(results)
     return pd.concat(results, ignore_index=True)
+
+def generate_summary(interp_df: pd.DataFrame):
+
+    # Statistiche per settimana
+    weekly_stats_all_years = interp_df.groupby('settimana').agg({
+        'consumo_giornaliero': ['mean', 'std'],
+        'consumo_settimanale': ['mean', 'std'],
+        'giorni_coperti': 'mean'
+    }).round(2)
     
+    print("\nSTATISTICHE PER SETTIMANA")
+    print("-" * 50)
+    for week in weekly_stats_all_years.index:
+        mean_daily = weekly_stats_all_years.loc[week, ('consumo_giornaliero', 'mean')]
+        std_daily = weekly_stats_all_years.loc[week, ('consumo_giornaliero', 'std')]
+        mean_weekly = weekly_stats_all_years.loc[week, ('consumo_settimanale', 'mean')]
+        std_weekly = weekly_stats_all_years.loc[week, ('consumo_settimanale', 'std')]
+        #total_yearly = weekly_stats_all_years.loc[year, ('Consumo Totale (kWh)', 'sum')]
+        #total_days = weekly_stats_all_years.loc[year, ('Giorni Periodo', 'sum')]
+        print(f"Settimana {week}: Media {mean_daily:.2f} ± {std_daily:.2f} kWh/giorno; Media {mean_weekly:.2f} ± {std_weekly:.2f} kWh/settimana")
+        #print(f"          Totale: {total_yearly:.1f} kWh in {total_days} giorni coperti")
+    
+    # Statistiche per anno
+    yearly_stats = interp_df.groupby('anno').agg({
+        'consumo_giornaliero': ['sum'],
+        'consumo_settimanale': ['sum'],
+        'giorni_coperti': 'sum'
+    }).round(2)
+    
+    print("\nSTATISTICHE PER ANNO")
+    print("-" * 50)
+    for year in yearly_stats.index:
+        # this is not accurate because not for all weeks we have full-week coverage, 7 days long:
+        #consumo_totale1 = yearly_stats.loc[year, ('consumo_giornaliero', 'sum')] * 7
+
+        consumo_totale2 = yearly_stats.loc[year, ('consumo_settimanale', 'sum')]
+        giorni_coperti = yearly_stats.loc[year, ('giorni_coperti', 'sum')]
+        print(f"Anno {year}: Consumo totale: {consumo_totale2:.2f} kWh [copertura: {giorni_coperti}gg]")
+
+    print(yearly_stats.to_html(index=False))
 
 def main():
     """Funzione principale"""
@@ -253,41 +292,8 @@ def main():
         interp_df.to_csv(args.csv_output, index=False)
         print(f"✅ File CSV creato: {args.csv_output}")
 
-        # Statistiche per settimana
-        weekly_stats_all_years = interp_df.groupby('settimana').agg({
-            'consumo_giornaliero': ['mean', 'std'],
-            'consumo_settimanale': ['mean', 'std'],
-            'giorni_coperti': 'mean'
-        }).round(2)
-        
-        print("\nSTATISTICHE PER SETTIMANA")
-        print("-" * 50)
-        for week in weekly_stats_all_years.index:
-            mean_daily = weekly_stats_all_years.loc[week, ('consumo_giornaliero', 'mean')]
-            std_daily = weekly_stats_all_years.loc[week, ('consumo_giornaliero', 'std')]
-            mean_weekly = weekly_stats_all_years.loc[week, ('consumo_settimanale', 'mean')]
-            std_weekly = weekly_stats_all_years.loc[week, ('consumo_settimanale', 'std')]
-            #total_yearly = weekly_stats_all_years.loc[year, ('Consumo Totale (kWh)', 'sum')]
-            #total_days = weekly_stats_all_years.loc[year, ('Giorni Periodo', 'sum')]
-            print(f"Settimana {week}: Media {mean_daily:.2f} ± {std_daily:.2f} kWh/giorno; Media {mean_weekly:.2f} ± {std_weekly:.2f} kWh/settimana")
-            #print(f"          Totale: {total_yearly:.1f} kWh in {total_days} giorni coperti")
-        
-        # Statistiche per anno
-        yearly_stats = interp_df.groupby('anno').agg({
-            'consumo_giornaliero': ['sum'],
-            'consumo_settimanale': ['sum'],
-            'giorni_coperti': 'sum'
-        }).round(2)
-        
-        print("\nSTATISTICHE PER ANNO")
-        print("-" * 50)
-        for year in yearly_stats.index:
-            # this is not accurate because not for all weeks we have full-week coverage, 7 days long:
-            #consumo_totale1 = yearly_stats.loc[year, ('consumo_giornaliero', 'sum')] * 7
-
-            consumo_totale2 = yearly_stats.loc[year, ('consumo_settimanale', 'sum')]
-            giorni_coperti = yearly_stats.loc[year, ('giorni_coperti', 'sum')]
-            print(f"Anno {year}: Consumo totale: {consumo_totale2:.2f} kWh [copertura: {giorni_coperti}gg]")
+        # stats
+        generate_summary(interp_df)
 
         print("\n" + "="*50)
         print("COMPLETATO CON SUCCESSO!")
