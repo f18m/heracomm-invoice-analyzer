@@ -210,3 +210,5 @@ __marimo__/
 # Ouput files
 *.xlsx
 *.xlsx#
+*.csv
+*.html
