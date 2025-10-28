@@ -11,28 +11,28 @@ def load_and_process_data(csv_file: str):
     df = pd.read_csv(csv_file)
     
     # Converte le date in formato datetime
-    df['Periodo Inizio'] = pd.to_datetime(df['Periodo Inizio'])
-    df['Periodo Fine'] = pd.to_datetime(df['Periodo Fine'])
-    print(f"Dati caricati: {len(df)} record dal {df['Periodo Inizio'].min().strftime('%Y-%m-%d')} al {df['Periodo Fine'].max().strftime('%Y-%m-%d')}")
+    df['periodo_inizio'] = pd.to_datetime(df['periodo_inizio'])
+    df['periodo_fine'] = pd.to_datetime(df['periodo_fine'])
+    print(f"Dati caricati: {len(df)} record dal {df['periodo_inizio'].min().strftime('%Y-%m-%d')} al {df['periodo_fine'].max().strftime('%Y-%m-%d')}")
     
     # Calcola il punto medio del periodo
-    df['Data Media'] = df['Periodo Inizio'] + (df['Periodo Fine'] - df['Periodo Inizio']) / 2
+    df['data_media'] = df['periodo_inizio'] + (df['periodo_fine'] - df['periodo_inizio']) / 2
     
     # Calcola i giorni del periodo
-    df['Giorni Periodo'] = (df['Periodo Fine'] - df['Periodo Inizio']).dt.days + 1
+    df['giorni_periodo'] = (df['periodo_fine'] - df['periodo_inizio']).dt.days + 1
     
     # Calcola il consumo medio giornaliero
-    df['Consumo Giornaliero'] = df['Consumo Totale (kWh)'] / df['Giorni Periodo']
+    df['consumo_giornaliero_kwh'] = df['consumo_totale_kwh'] / df['giorni_periodo']
     
     # Informazioni sui periodi di fatturazione
     print("\nINFORMAZIONI PERIODI DI FATTURAZIONE")
     print("-" * 50)
-    df['Anno'] = df['Periodo Inizio'].dt.year
+    df['Anno'] = df['periodo_inizio'].dt.year
     for year in sorted(df['Anno'].unique()):
         year_data = df[df['Anno'] == year]
         num_periods = len(year_data)
-        avg_period_length = year_data['Giorni Periodo'].mean()
-        coverage = (year_data['Giorni Periodo'].sum() / 365.25) * 100
+        avg_period_length = year_data['giorni_periodo'].mean()
+        coverage = (year_data['giorni_periodo'].sum() / 365.25) * 100
         print(f"Anno {year}: {num_periods} periodi, durata media {avg_period_length:.1f} giorni, copertura {coverage:.1f}%")
 
     return df
@@ -89,8 +89,8 @@ def distribute_uniform_consumption(df, year: int):
     year_end = datetime(year, 12, 31)
     
     year_data = df[
-        (df['Periodo Inizio'] <= year_end) & 
-        (df['Periodo Fine'] >= year_start)
+        (df['periodo_inizio'] <= year_end) & 
+        (df['periodo_fine'] >= year_start)
     ].copy()
     
     if len(year_data) == 0:
@@ -112,9 +112,9 @@ def distribute_uniform_consumption(df, year: int):
     
     # Per ogni periodo, distribuisce il consumo nelle settimane che interseca
     for _, periodo in year_data.iterrows():
-        periodo_start = periodo['Periodo Inizio']
-        periodo_end = periodo['Periodo Fine']
-        consumo_giornaliero = periodo['Consumo Giornaliero']
+        periodo_start = periodo['periodo_inizio']
+        periodo_end = periodo['periodo_fine']
+        consumo_giornaliero = periodo['consumo_giornaliero_kwh']
         
         # Limita il periodo all'anno corrente per il calcolo
         periodo_start_year = max(periodo_start, year_start)
@@ -203,7 +203,7 @@ def process_all_years(df: pd.DataFrame):
     """Processa i dati anno per anno"""
     
     # Ottieni gli anni disponibili nei dati
-    years = sorted(df['Periodo Inizio'].dt.year.unique())
+    years = sorted(df['periodo_inizio'].dt.year.unique())
 
     # Crea le tracce per ogni anno
     results = []
@@ -231,7 +231,7 @@ def generate_summary(interp_df: pd.DataFrame):
         mean_weekly = weekly_stats_all_years.loc[week, ('consumo_settimanale', 'mean')]
         std_weekly = weekly_stats_all_years.loc[week, ('consumo_settimanale', 'std')]
         #total_yearly = weekly_stats_all_years.loc[year, ('Consumo Totale (kWh)', 'sum')]
-        #total_days = weekly_stats_all_years.loc[year, ('Giorni Periodo', 'sum')]
+        #total_days = weekly_stats_all_years.loc[year, ('giorni_periodo', 'sum')]
         print(f"Settimana {week}: Media {mean_daily:.2f} ± {std_daily:.2f} kWh/giorno; Media {mean_weekly:.2f} ± {std_weekly:.2f} kWh/settimana")
         #print(f"          Totale: {total_yearly:.1f} kWh in {total_days} giorni coperti")
     
