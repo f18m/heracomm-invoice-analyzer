@@ -345,7 +345,7 @@ def main():
     parser = argparse.ArgumentParser(description="Estrai dati dalle bollette Hera e crea un Excel riepilogativo con grafici.")
     parser.add_argument("input_path", help="Percorso di un file ZIP di bollette o di una cartella contenente PDF")
     parser.add_argument("--output-csv", default="bollette_hera_riepilogo.csv", help="Nome del file CSV di output")
-    parser.add_argument("--output-excel", default="bollette_hera_riepilogo.xlsx", help="Nome del file Excel di output")
+    parser.add_argument("--output-excel", default="", help="Nome del file Excel di output")
     parser.add_argument("--output-summary", default="detailed", help="Scrivi in output un sommario su base annuale, o più dettagliata", choices=["detailed", "yearly", "none"])
     parser.add_argument("--summary-format", default="text", help="Formato del sommario", choices=["text", "html"])
     parser.add_argument("--verbose", type=int, help="Enable verbose output", default=0)

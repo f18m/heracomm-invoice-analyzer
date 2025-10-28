@@ -21,8 +21,10 @@ def load_and_process_data(csv_file: str):
     # Calcola i giorni del periodo
     df['giorni_periodo'] = (df['periodo_fine'] - df['periodo_inizio']).dt.days + 1
     
-    # Calcola il consumo medio giornaliero
+    # Normalizza rispetto al GIORNO le quantita che distribuiremo uniformemente
     df['consumo_giornaliero_kwh'] = df['consumo_totale_kwh'] / df['giorni_periodo']
+    df['costo_materia_energia_giornaliero_eur'] = df['materia_energia_eur'] / df['giorni_periodo']
+    df['costo_totale_giornaliero_eur'] = df['totale_bolletta_eur'] / df['giorni_periodo']
     
     # Informazioni sui periodi di fatturazione
     print("\nINFORMAZIONI PERIODI DI FATTURAZIONE")
@@ -31,9 +33,9 @@ def load_and_process_data(csv_file: str):
     for year in sorted(df['Anno'].unique()):
         year_data = df[df['Anno'] == year]
         num_periods = len(year_data)
-        avg_period_length = year_data['giorni_periodo'].mean()
+        sum_period_length = year_data['giorni_periodo'].sum()
         coverage = (year_data['giorni_periodo'].sum() / 365.25) * 100
-        print(f"Anno {year}: {num_periods} periodi, durata media {avg_period_length:.1f} giorni, copertura {coverage:.1f}%")
+        print(f"Anno {year}: {num_periods} periodi, durata totale {sum_period_length:.1f} giorni, copertura {coverage:.1f}%")
 
     return df
 
@@ -105,7 +107,11 @@ def distribute_uniform_consumption(df, year: int):
         weekly_results[week['settimana']] = {
             'settimana': week['settimana'],
             'data_centro': week['centro'],
-            'consumo_totale_settimana': 0,
+            'periodo_inizio': week['inizio'],
+            'periodo_fine': week['fine'],
+            'consumo_totale_settimana_kwh': None,
+            'costo_totale_settimana_eur': None,
+            'costo_materia_energia_settimana_eur': None,
             'giorni_totali_coperti': 0,
             'periodi_che_intersecano': []
         }
@@ -114,7 +120,6 @@ def distribute_uniform_consumption(df, year: int):
     for _, periodo in year_data.iterrows():
         periodo_start = periodo['periodo_inizio']
         periodo_end = periodo['periodo_fine']
-        consumo_giornaliero = periodo['consumo_giornaliero_kwh']
         
         # Limita il periodo all'anno corrente per il calcolo
         periodo_start_year = max(periodo_start, year_start)
@@ -126,6 +131,7 @@ def distribute_uniform_consumption(df, year: int):
         
         # Trova tutte le settimane che intersecano questo periodo (limitato all'anno)
         for week in weeks:
+            week_num = week['settimana']
             week_start = week['inizio']
             week_end = week['fine']
             
@@ -138,61 +144,43 @@ def distribute_uniform_consumption(df, year: int):
                 giorni_intersezione = (intersection_end - intersection_start).days + 1
                 
                 # Aggiungi il consumo di questi giorni alla settimana
-                consumo_settimana = consumo_giornaliero * giorni_intersezione
-                
-                weekly_results[week['settimana']]['consumo_totale_settimana'] += consumo_settimana
-                weekly_results[week['settimana']]['giorni_totali_coperti'] += giorni_intersezione
-                weekly_results[week['settimana']]['periodi_che_intersecano'].append({
+                consumo_settimana_kwh = periodo['consumo_giornaliero_kwh'] * giorni_intersezione
+                costo_materia_energia_settimana_eur = periodo['costo_materia_energia_giornaliero_eur']* giorni_intersezione
+                costo_totale_settimana_eur = periodo['costo_totale_giornaliero_eur']* giorni_intersezione
+
+                weekly_results[week_num]['periodi_che_intersecano'].append({
                     'periodo_id': periodo.name,
                     'periodo_start': periodo_start.strftime('%Y-%m-%d'),
                     'periodo_end': periodo_end.strftime('%Y-%m-%d'),
                     'giorni': giorni_intersezione,
-                    'consumo': consumo_settimana
+                    'consumo': consumo_settimana_kwh
                 })
-    
+                
+                if giorni_intersezione > weekly_results[week_num]['giorni_totali_coperti']:
+                    # Rimpiazza i dati precedenti con queste ultime letture visto che probabilmente la bolletta
+                    # da cui vengono è una bolletta con ricalcolo di un periodo precedente già fatturato
+                    weekly_results[week_num]['consumo_totale_settimana_kwh'] = consumo_settimana_kwh
+                    weekly_results[week_num]['costo_materia_energia_settimana_eur'] = costo_materia_energia_settimana_eur
+                    weekly_results[week_num]['costo_totale_settimana_eur'] = costo_totale_settimana_eur
+                    weekly_results[week_num]['giorni_totali_coperti'] = giorni_intersezione
+
     # Calcola i consumi finali per ogni settimana
     results = []
     for week_num, data in weekly_results.items():
-        if data['giorni_totali_coperti'] > 0:
-            # Il consumo totale della settimana è la somma dei consumi dei giorni coperti
-            weekly_consumption = data['consumo_totale_settimana']
-            
-            # Il consumo medio giornaliero è calcolato sui giorni effettivamente coperti
-            avg_daily = weekly_consumption / data['giorni_totali_coperti']
-            
-            # Se la settimana non è completamente coperta (meno di 7 giorni),
-            # estrapola il consumo per tutta la settimana
-            if data['giorni_totali_coperti'] < 7:
-                weekly_consumption = avg_daily * 7
-        else:
-            # Se non ci sono dati per questa settimana, usa la media delle settimane vicine
-            avg_daily = None
-            weekly_consumption = None
-            
-            # # Cerca le settimane più vicine con dati
-            # neighbor_values = []
-            # for offset in range(1, 27):  # Cerca fino a 26 settimane prima/dopo
-            #     for direction in [-1, 1]:
-            #         neighbor_week = week_num + (offset * direction)
-            #         if 1 <= neighbor_week <= 52 and neighbor_week in weekly_results:
-            #             neighbor_data = weekly_results[neighbor_week]
-            #             if neighbor_data['giorni_totali_coperti'] > 0:
-            #                 neighbor_avg = neighbor_data['consumo_totale_settimana'] / neighbor_data['giorni_totali_coperti']
-            #                 neighbor_values.append(neighbor_avg)
-            #                 break
-            #     if len(neighbor_values) >= 2:  # Usa al massimo 2 vicini
-            #         break
-            
-            # if neighbor_values:
-            #     avg_daily = np.mean(neighbor_values)
-            #     weekly_consumption = avg_daily * 7
+        daily_kwh = None
+        if data['giorni_totali_coperti']>0:
+            daily_kwh = data['consumo_totale_settimana_kwh']/data['giorni_totali_coperti']
         
         results.append({
             'anno': year,
             'settimana': week_num,
-            'data_centro': data['data_centro'],
-            'consumo_giornaliero': avg_daily,
-            'consumo_settimanale': weekly_consumption,
+            #'data_centro': data['data_centro'],
+            'periodo_inizio': data['periodo_inizio'],
+            'periodo_fine': data['periodo_fine'],
+            'consumo_giornaliero_kwh': daily_kwh,
+            'consumo_settimanale_kwh': data['consumo_totale_settimana_kwh'],
+            'costo_materia_energia_settimana_eur': data['costo_materia_energia_settimana_eur'],
+            'costo_totale_settimana_eur': data['costo_totale_settimana_eur'],
             'giorni_coperti': data['giorni_totali_coperti'],
             'num_periodi': len(data['periodi_che_intersecano'])
         })
@@ -218,27 +206,29 @@ def generate_summary(interp_df: pd.DataFrame):
 
     # Statistiche per settimana
     weekly_stats_all_years = interp_df.groupby('settimana').agg({
-        'consumo_giornaliero': ['mean', 'std'],
-        'consumo_settimanale': ['mean', 'std'],
+        'consumo_giornaliero_kwh': ['mean', 'std'],
+        'consumo_settimanale_kwh': ['mean', 'std'],
         'giorni_coperti': 'mean'
     }).round(2)
     
     print("\nSTATISTICHE PER SETTIMANA")
     print("-" * 50)
     for week in weekly_stats_all_years.index:
-        mean_daily = weekly_stats_all_years.loc[week, ('consumo_giornaliero', 'mean')]
-        std_daily = weekly_stats_all_years.loc[week, ('consumo_giornaliero', 'std')]
-        mean_weekly = weekly_stats_all_years.loc[week, ('consumo_settimanale', 'mean')]
-        std_weekly = weekly_stats_all_years.loc[week, ('consumo_settimanale', 'std')]
+        mean_daily = weekly_stats_all_years.loc[week, ('consumo_giornaliero_kwh', 'mean')]
+        std_daily = weekly_stats_all_years.loc[week, ('consumo_giornaliero_kwh', 'std')]
+        mean_weekly = weekly_stats_all_years.loc[week, ('consumo_settimanale_kwh', 'mean')]
+        std_weekly = weekly_stats_all_years.loc[week, ('consumo_settimanale_kwh', 'std')]
         #total_yearly = weekly_stats_all_years.loc[year, ('Consumo Totale (kWh)', 'sum')]
         #total_days = weekly_stats_all_years.loc[year, ('giorni_periodo', 'sum')]
-        print(f"Settimana {week}: Media {mean_daily:.2f} ± {std_daily:.2f} kWh/giorno; Media {mean_weekly:.2f} ± {std_weekly:.2f} kWh/settimana")
+        print(f"Settimana {week}: {mean_daily:.2f} ± {std_daily:.2f} kWh/giorno; {mean_weekly:.2f} ± {std_weekly:.2f} kWh/settimana")
         #print(f"          Totale: {total_yearly:.1f} kWh in {total_days} giorni coperti")
     
     # Statistiche per anno
     yearly_stats = interp_df.groupby('anno').agg({
-        'consumo_giornaliero': ['sum'],
-        'consumo_settimanale': ['sum'],
+        'costo_totale_settimana_eur': ['sum'], 
+        'costo_materia_energia_settimana_eur': ['sum'],
+        'consumo_giornaliero_kwh': ['sum'],
+        'consumo_settimanale_kwh': ['sum'],
         'giorni_coperti': 'sum'
     }).round(2)
     
@@ -248,9 +238,12 @@ def generate_summary(interp_df: pd.DataFrame):
         # this is not accurate because not for all weeks we have full-week coverage, 7 days long:
         #consumo_totale1 = yearly_stats.loc[year, ('consumo_giornaliero', 'sum')] * 7
 
-        consumo_totale2 = yearly_stats.loc[year, ('consumo_settimanale', 'sum')]
+        consumo_totale2 = yearly_stats.loc[year, ('consumo_settimanale_kwh', 'sum')]
+        costo_totale_anno_eur = yearly_stats.loc[year, ('costo_totale_settimana_eur', 'sum')]
+        costo_materia_energia_anno_eur = yearly_stats.loc[year, ('costo_materia_energia_settimana_eur', 'sum')]
+        
         giorni_coperti = yearly_stats.loc[year, ('giorni_coperti', 'sum')]
-        print(f"Anno {year}: Consumo totale: {consumo_totale2:.2f} kWh [copertura: {giorni_coperti}gg]")
+        print(f"Anno {year}: Consumo totale: {consumo_totale2:.2f} kWh; Costo totale: {costo_totale_anno_eur}€; Costo materia energia: {costo_materia_energia_anno_eur}€ [copertura: {giorni_coperti}gg]")
 
     print(yearly_stats.to_html(index=False))
 
