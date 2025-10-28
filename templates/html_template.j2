@@ -196,22 +196,27 @@
         });
         
         function calcolaStatistiche(dati) {
-            const consumiSettimanali = dati.consumo_settimanale.filter(c => c > 0);
-            const consumiGiornalieri = dati.consumo_giornaliero.filter(c => c > 0);
+            const consumiSettimanali = dati.consumo_settimanale_kwh.filter(c => c > 0);
+            const consumiGiornalieri = dati.consumo_giornaliero_kwh.filter(c => c > 0);
+            const costoTotaleSettimanale = dati.costo_totale_settimana_eur.filter(c => c > 0);
             
-            const totale = consumiSettimanali.reduce((a, b) => a + b, 0);
-            const media = totale / consumiSettimanali.length;
-            const max = Math.max(...consumiSettimanali);
-            const min = Math.min(...consumiSettimanali);
+            const totale_kwh = consumiSettimanali.reduce((a, b) => a + b, 0);
+            const media = totale_kwh / consumiSettimanali.length;
+            const week_max = Math.max(...consumiSettimanali);
+            const week_min = Math.min(...consumiSettimanali);
             const mediaGiornaliera = consumiGiornalieri.reduce((a, b) => a + b, 0) / consumiGiornalieri.length;
+            const costoTotale = costoTotaleSettimanale.reduce((a, b) => a + b, 0);
             
             return {
-                totale: totale.toFixed(2),
+                totale_kwh: totale_kwh.toFixed(0),
+                week_max: week_max.toFixed(1),
+                week_min: week_min.toFixed(1),
+                copertura: (consumiSettimanali.length / 52 * 100).toFixed(1),
+                costoTotale: costoTotale.toFixed(0),
+
+                // inutilizzati
                 media: media.toFixed(2),
-                max: max.toFixed(2),
-                min: min.toFixed(2),
                 mediaGiornaliera: mediaGiornaliera.toFixed(2),
-                settimane: consumiSettimanali.length
             };
         }
         
@@ -221,9 +226,11 @@
             statsContainer.innerHTML = `
                 <div class="stat-card">
                     <h3>Consumo Totale</h3>
-                    <div class="value">${stats.totale}</div>
+                    <div class="value">${stats.totale_kwh}</div>
                     <div class="unit">kWh</div>
                 </div>
+
+                <!-- non ha molto senso
                 <div class="stat-card">
                     <h3>Media Settimanale</h3>
                     <div class="value">${stats.media}</div>
@@ -234,20 +241,31 @@
                     <div class="value">${stats.mediaGiornaliera}</div>
                     <div class="unit">kWh/giorno</div>
                 </div>
-                <div class="stat-card">
-                    <h3>Massimo Settimanale</h3>
-                    <div class="value">${stats.max}</div>
-                    <div class="unit">kWh</div>
-                </div>
+                -->
+
+
                 <div class="stat-card">
                     <h3>Minimo Settimanale</h3>
-                    <div class="value">${stats.min}</div>
+                    <div class="value">${stats.week_min}</div>
                     <div class="unit">kWh</div>
                 </div>
                 <div class="stat-card">
-                    <h3>Settimane con Dati</h3>
-                    <div class="value">${stats.settimane}</div>
-                    <div class="unit">settimane</div>
+                    <h3>Massimo Settimanale</h3>
+                    <div class="value">${stats.week_max}</div>
+                    <div class="unit">kWh</div>
+                </div>
+
+                <div class="stat-card">
+                    <h3>Costo Totale</h3>
+                    <div class="value">€ ${stats.costoTotale}</div>
+                    <div class="unit">Euro</div>
+                </div>
+
+
+                <div class="stat-card">
+                    <h3>Copertura Dati</h3>
+                    <div class="value">${stats.copertura}</div>
+                    <div class="unit">%</div>
                 </div>
             `;
         }
@@ -257,28 +275,28 @@
             
             const trace1 = {
                 x: dati.settimane,
-                y: dati.consumo_settimanale,
+                y: dati.consumo_settimanale_kwh,
                 type: 'bar',
                 name: 'Consumo Settimanale',
                 marker: {
-                    color: dati.consumo_settimanale,
+                    color: dati.consumo_settimanale_kwh,
                     colorscale: 'Viridis',
                     showscale: true,
                     colorbar: {
                         title: 'kWh'
                     }
                 },
-                text: dati.consumo_settimanale.map(c => c.toFixed(2) + ' kWh'),
+                text: dati.consumo_settimanale_kwh.map(c => c.toFixed(2) + ' kWh'),
                 hovertemplate: '<b>Settimana %{x}</b><br>' +
-                            'Data: %{customdata}<br>' +
                             'Consumo: %{y:.2f} kWh<br>' +
+                            'Costo: %{customdata} €<br>' +
                             '<extra></extra>',
-                customdata: dati.date
+                customdata: dati.costo_totale_settimana_eur
             };
             
             const trace2 = {
                 x: dati.settimane,
-                y: dati.consumo_giornaliero,
+                y: dati.consumo_giornaliero_kwh,
                 type: 'scatter',
                 mode: 'lines+markers',
                 name: 'Consumo Giornaliero Medio',

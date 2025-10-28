@@ -7,12 +7,15 @@ from jinja2 import Environment, FileSystemLoader
 
 def load_data(file_path):
     # Leggi il CSV
+    # header atteso:
+    #    anno,settimana,periodo_inizio,periodo_fine,consumo_giornaliero_kwh,consumo_settimanale_kwh,
+    #    costo_materia_energia_settimana_eur,costo_totale_settimana_eur,giorni_coperti,num_periodi
     return pd.read_csv(file_path)
 
 
 def create_html_page(df, output_file):
     # Filtra solo le righe con dati validi (consumo_settimanale non nullo)
-    df = df[df['consumo_settimanale'].notna()].copy()
+    df = df[df['consumo_settimanale_kwh'].notna()].copy()
 
     # Prepara i dati per anno
     anni_disponibili = sorted(df['anno'].unique())
@@ -24,9 +27,11 @@ def create_html_page(df, output_file):
         df_anno = df[df['anno'] == anno]
         dati_per_anno[str(anno)] = {
             'settimane': df_anno['settimana'].tolist(),
-            'date': df_anno['data_centro'].tolist(),
-            'consumo_giornaliero': df_anno['consumo_giornaliero'].round(2).tolist(),
-            'consumo_settimanale': df_anno['consumo_settimanale'].round(2).tolist(),
+            'date': df_anno['periodo_inizio'].tolist(),
+            'consumo_giornaliero_kwh': df_anno['consumo_giornaliero_kwh'].round(2).tolist(),
+            'consumo_settimanale_kwh': df_anno['consumo_settimanale_kwh'].round(2).tolist(),
+            'costo_materia_energia_settimana_eur': df_anno['costo_materia_energia_settimana_eur'].round(2).tolist(),
+            'costo_totale_settimana_eur': df_anno['costo_totale_settimana_eur'].round(2).tolist(),
             'giorni_coperti': df_anno['giorni_coperti'].tolist()
         }
 
