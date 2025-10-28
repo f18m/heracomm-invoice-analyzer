@@ -14,9 +14,23 @@ from datetime import datetime, timedelta
 
 class InvoiceAnalyzer:
 
-    REGEX_PERIODO = r"Periodo: dal (\d{2}\.\d{2}\.\d{4}) al (\d{2}\.\d{2}\.\d{4})"
     INTESTAZIONE_BOLLETTA_ELETTRICA = "Bolletta energia elettrica"
     INTESTAZIONE_BOLLETTA_GAS = "Bolletta gas"
+
+    REGEX_PERIODO = r"Periodo: dal (\d{2}\.\d{2}\.\d{4}) al (\d{2}\.\d{2}\.\d{4})"
+    REGEX_SPESE_IN_EURO = {
+        "materia_energia": r"Spesa per la materia energia\s+([\d.,]+)\s*€",
+        "trasporto_e_contatore": r"Spesa per il trasporto e la gestione del contatore\s+([\d.,]+)\s*€",
+        "oneri_di_sistema": r"Spesa per oneri di sistema\s+([\d.,]+)\s*€",
+        "imposte_e_iva": r"Totale imposte e IVA\s+([\d.,]+)\s*€",
+        "totale_bolletta": r"Totale bolletta/contratto\s+([\d.,]+)\s*€"
+    }
+
+    REGEX_CONSUMI_IN_KWH = [
+        r"Consumo fatturato.*?([-\d,.]+)\s+([-\d,.]+)\s+([-\d,.]+)\s*kWh",
+        # Alcune volte il formato è leggermente diverso... proviamo con una regex alternativa
+        r"Consumo fatturato\s\(Chilowatt orari\)\n([-\d,.]+)\n([-\d,.]+)\n([-\d,.]+)\s*kWh"
+    ]
 
     def __init__(self, verbose: int = 0):
         self.verbose = verbose
@@ -116,13 +130,8 @@ class InvoiceAnalyzer:
             return None  # Se non troviamo il periodo, la bolletta non è valida
 
         # Consumi per fasce e totale
-        consumi_regex = [
-            r"Consumo fatturato.*?([-\d,.]+)\s+([-\d,.]+)\s+([-\d,.]+)\s*kWh",
-            # Alcune volte il formato è leggermente diverso... proviamo con una regex alternativa
-            r"Consumo fatturato\s\(Chilowatt orari\)\n([-\d,.]+)\n([-\d,.]+)\n([-\d,.]+)\s*kWh"
-        ]
         consumi_match = None
-        for regex in consumi_regex:
+        for regex in InvoiceAnalyzer.REGEX_CONSUMI_IN_KWH:
             consumi_match = re.search(regex, text)
             if consumi_match:
                 break
@@ -136,30 +145,43 @@ class InvoiceAnalyzer:
                 print(f"⚠️ Attenzione: impossibile trovare i consumi nella bolletta {nome_file}.")
             return None  # Se non troviamo i consumi, la bolletta non è valida
 
-        # Totale energia elettrica (escludendo gas e altri servizi)
-        elettricita_match = re.search(r"Totale bolletta/contratto\s+([\d,]+)", text)
-        if elettricita_match:
-            totale_elettricita = self.__italian_number_to_float_safe(elettricita_match.group(1))
-        else:
-            #totale_elettricita = None
-            if self.verbose > 0:
-                print(f"⚠️ Attenzione: impossibile trovare il totale energia nella bolletta {nome_file}.")
-            return None  # Se non troviamo il totale, la bolletta non è valida
+        # # Totale energia elettrica (escludendo gas e altri servizi)
+        # elettricita_match = re.search(r"Totale bolletta/contratto\s+([\d,]+)", text)
+        # if elettricita_match:
+        #     totale_elettricita = self.__italian_number_to_float_safe(elettricita_match.group(1))
+        # else:
+        #     #totale_elettricita = None
+        #     if self.verbose > 0:
+        #         print(f"⚠️ Attenzione: impossibile trovare il totale energia nella bolletta {nome_file}.")
+        #     return None  # Se non troviamo il totale, la bolletta non è valida
 
+        # Voci di spesa
+        voci_spesa = {}
+        for voce_spesa, regex in InvoiceAnalyzer.REGEX_SPESE_IN_EURO.items():
+            match = re.search(regex, text)
+            if match:
+                voci_spesa[voce_spesa] = self.__italian_number_to_float_safe(match.group(1))
+            else:
+                voci_spesa[voce_spesa] = 0.0
+
+        # Fine estrazione
         if self.verbose > 1:
-            print(f"💬 Bolletta {nome_file}: Periodo {periodo_inizio} - {periodo_fine} ({numero_giorni} giorni), Consumi F1={consumo_f1} kWh, F2+F3={consumo_f23} kWh, Totale={consumo_tot} kWh, Costo={totale_elettricita} €")
+            print(f"💬 Bolletta {nome_file}: Periodo {periodo_inizio} - {periodo_fine} ({numero_giorni} giorni), Consumi F1={consumo_f1}kWh, F2+F3={consumo_f23}kWh, Totale={consumo_tot}kWh, Costo={voci_spesa['totale_bolletta']}€")
 
         return {
-            "File": pdf_path, # string
-            "Periodo Inizio": periodo_inizio, # datetime
-            "Periodo Fine": periodo_fine, # datetime 
-            "Numero Giorni": numero_giorni, # int
-            "Consumo F1 (kWh)": consumo_f1, # float
-            "Consumo F2+F3 (kWh)": consumo_f23, # float
-            "Consumo Totale (kWh)": consumo_tot, # float
-            "Totale Energia (€)": totale_elettricita, # float
+            "file": pdf_path, # string
+            "periodo_inizio": periodo_inizio, # datetime
+            "periodo_fine": periodo_fine, # datetime 
+            "numero_giorni": numero_giorni, # int
+            "consumo_f1_kwh": consumo_f1, # float
+            "consumo_f23_kwh": consumo_f23, # float
+            "consumo_totale_kwh": consumo_tot, # float
+            "materia_energia_eur": voci_spesa['materia_energia'], # float
+            "trasporto_e_contatore_eur": voci_spesa['trasporto_e_contatore'], # float
+            "oneri_di_sistema_eur": voci_spesa['oneri_di_sistema'], # float
+            "imposte_e_iva_eur": voci_spesa['imposte_e_iva'], # float
+            "totale_bolletta_eur": voci_spesa['totale_bolletta'], # float
         }
-
 
     def estrai_dati_bolletta(self, pdf_path: str) -> list[dict]:
         """Estrae i dati richiesti da una singola bolletta PDF Hera
@@ -201,7 +223,7 @@ class Tools:
         wb = openpyxl.load_workbook(excel_path)
         ws = wb.active
 
-        # Creiamo una colonna con i periodi come etichette (Periodo Inizio - Periodo Fine)
+        # Creiamo una colonna con i periodi come etichette (periodo_inizio - periodo_fine)
         for i in range(2, ws.max_row + 1):
             periodo = f"{ws.cell(row=i, column=2).value} - {ws.cell(row=i, column=3).value}"
             ws.cell(row=i, column=8, value=periodo)
@@ -239,16 +261,16 @@ class Tools:
         """Verifica se ci sono buchi temporali tra le bollette"""
 
         df = pd.DataFrame(self.dati_bollette)
-        df["Periodo Inizio"] = pd.to_datetime(df["Periodo Inizio"], format="%d.%m.%Y")
-        df["Periodo Fine"] = pd.to_datetime(df["Periodo Fine"], format="%d.%m.%Y")
+        df["periodo_inizio"] = pd.to_datetime(df["periodo_inizio"], format="%d.%m.%Y")
+        df["periodo_fine"] = pd.to_datetime(df["periodo_fine"], format="%d.%m.%Y")
 
         # Ordinamento cronologico
-        df = df.sort_values("Periodo Inizio").reset_index(drop=True)
+        df = df.sort_values("periodo_inizio").reset_index(drop=True)
 
         gaps = []
         for i in range(1, len(df)):
-            prev_end = df.loc[i-1, "Periodo Fine"]
-            curr_start = df.loc[i, "Periodo Inizio"]
+            prev_end = df.loc[i-1, "periodo_fine"]
+            curr_start = df.loc[i, "periodo_inizio"]
 
             if curr_start > prev_end + timedelta(days=1):
                 gaps.append((prev_end + timedelta(days=1), curr_start - timedelta(days=1)))
@@ -261,10 +283,10 @@ class Tools:
         for dati in self.dati_bollette:
             curr_path = os.path.dirname(dati["File"])
             old_name = os.path.basename(dati["File"])
-            periodo_inizio = dati["Periodo Inizio"].strftime("%Y%m%d")
-            periodo_fine = dati["Periodo Fine"].strftime("%Y%m%d")
-            anno = dati["Periodo Inizio"].year
-            mese = dati["Periodo Inizio"].month
+            periodo_inizio = dati["periodo_inizio"].strftime("%Y%m%d")
+            periodo_fine = dati["periodo_fine"].strftime("%Y%m%d")
+            anno = dati["periodo_inizio"].year
+            mese = dati["periodo_inizio"].month
             nuovo_nome = f"{curr_path}/elettricita_{anno}_{mese:02}_{periodo_inizio}_{periodo_fine}.pdf"
 
             if dati["File"] in temp_dict:
@@ -292,12 +314,12 @@ class Tools:
         if summary_type == "detailed":
             # Stampa un sommario testuale
             df = pd.DataFrame(self.dati_bollette)
-            df = df.sort_values("Periodo Inizio").reset_index(drop=True)
+            df = df.sort_values("periodo_inizio").reset_index(drop=True)
             print("\n📄 Sommario Bollette:")
             if summary_format == "html":
                 print(df.to_html(index=False))
             else:
-                print(df[["Periodo Inizio", "Periodo Fine", "Consumo Totale (kWh)", "Totale Energia (€)", "Numero Giorni"]].to_string(index=False))
+                print(df[["periodo_inizio", "periodo_fine", "consumo_totale_kwh", "totale_bolletta_eur", "numero_giorni"]].to_string(index=False))
         elif summary_type == "yearly":
             print("⚠️ Avviso: il sommario annuale è stato disabilitato in questo step. Usa lo step2_interpolazione.py per un sommario accurato.")
         # il sommario annuale implementato sotto è molto IMPRECISO a causa delle bollette
@@ -306,7 +328,7 @@ class Tools:
         # elif summary_type == "yearly":
         #     # Stampa un sommario annuale
         #     df = pd.DataFrame(self.dati_bollette)
-        #     df["Anno"] = df["Periodo Inizio"].dt.year
+        #     df["Anno"] = df["periodo_inizio"].dt.year
         #     summary = df.groupby("Anno").agg({
         #         "Consumo Totale (kWh)": "sum",
         #         "Totale Energia (€)": "sum",
@@ -324,7 +346,7 @@ def main():
     parser.add_argument("input_path", help="Percorso di un file ZIP di bollette o di una cartella contenente PDF")
     parser.add_argument("--output-csv", default="bollette_hera_riepilogo.csv", help="Nome del file CSV di output")
     parser.add_argument("--output-excel", default="bollette_hera_riepilogo.xlsx", help="Nome del file Excel di output")
-    parser.add_argument("--output-summary", default="yearly", help="Scrivi in output un sommario su base annuale, o più dettagliata", choices=["detailed", "yearly", "none"])
+    parser.add_argument("--output-summary", default="detailed", help="Scrivi in output un sommario su base annuale, o più dettagliata", choices=["detailed", "yearly", "none"])
     parser.add_argument("--summary-format", default="text", help="Formato del sommario", choices=["text", "html"])
     parser.add_argument("--verbose", type=int, help="Enable verbose output", default=0)
     parser.add_argument("--grafici", help="Aggiungi grafici nell'output", action='store_true')
