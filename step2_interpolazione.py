@@ -261,7 +261,7 @@ def main():
         help='Nome del file CSV con i dati (default: bollette_hera_riepilogo.csv)'
     )
     parser.add_argument(
-        '-o', '--csv-output',
+        '-o', '--output-csv',
         default='bollette_hera_riepilogo_processato.csv',
         help='Nome del file di output (default: bollette_hera_riepilogo_processato.csv)'
     )
@@ -282,8 +282,8 @@ def main():
         interp_df = process_all_years(df)
         
         # save to disk as CSV the dataframe
-        interp_df.to_csv(args.csv_output, index=False)
-        print(f"✅ File CSV creato: {args.csv_output}")
+        interp_df.to_csv(args.output_csv, index=False)
+        print(f"✅ File CSV creato: {args.output_csv}")
 
         # stats
         generate_summary(interp_df)

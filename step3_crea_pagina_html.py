@@ -68,7 +68,7 @@ def main():
         help='Nome del file CSV con i dati (default: bollette_hera_riepilogo_processato.csv)'
     )
     parser.add_argument(
-        '-o', '--html-output',
+        '-o', '--output-html',
         default='bollette_hera_riepilogo_interattivo.html',
         help='Nome del file di output (default: bollette_hera_riepilogo_processato.html)'
     )
@@ -81,8 +81,8 @@ def main():
         df = load_data(csv_file)
 
         # Crea la pagina HTML
-        create_html_page(df, args.html_output)
-        print(f"✅ File HTML generato con successo: {args.html_output}")
+        create_html_page(df, args.output_html)
+        print(f"✅ File HTML generato con successo: {args.output_html}")
 
     except Exception as e:
         print(f"❌ Errore durante l'elaborazione: {e}")
