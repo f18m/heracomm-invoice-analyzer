@@ -212,3 +212,6 @@ __marimo__/
 *.xlsx#
 *.csv
 *.html
+
+# Billing files
+bills/
