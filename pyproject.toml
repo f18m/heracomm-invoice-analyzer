@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "heracomm-invoice-analyzer"
+version = "0.1.0"
+description = "Household electricity bill analyzer for HERAComm PDF invoices"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "et_xmlfile==2.0.0",
+    "numpy==2.3.3",
+    "openpyxl==3.1.5",
+    "pandas==2.3.2",
+    "PyMuPDF==1.26.4",
+    "python-dateutil==2.9.0.post0",
+    "pytz==2025.2",
+    "six==1.17.0",
+    "tzdata==2025.2",
+    "jinja2>=3.1.0",
+]
+
+[project.scripts]
+heracomm-step1 = "step1_invoice_analyzer:main"
+heracomm-step2 = "step2_interpolate:main"
+heracomm-step3 = "step3_create_html_page:main"
+
+[tool.setuptools]
+py-modules = [
+    "step1_invoice_analyzer",
+    "step2_interpolate",
+    "step3_create_html_page",
+]
