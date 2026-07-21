@@ -1,5 +1,5 @@
 et_xmlfile==2.0.0
-numpy==2.3.3
+numpy==2.5.1
 openpyxl==3.1.5
 pandas==2.3.2
 PyMuPDF==1.26.4
