@@ -130,6 +130,25 @@
             color: #718096;
             font-size: 0.9em;
         }
+
+        .stat-card.alert-low-coverage {
+            background: #b42318;
+            color: white;
+        }
+
+        .stat-card.alert-good-coverage {
+            background: #15803d;
+            color: white;
+        }
+
+        .stat-card.alert-low-coverage h3,
+        .stat-card.alert-low-coverage .value,
+        .stat-card.alert-low-coverage .unit,
+        .stat-card.alert-good-coverage h3,
+        .stat-card.alert-good-coverage .value,
+        .stat-card.alert-good-coverage .unit {
+            color: white;
+        }
         
         .chart-container {
             padding: 30px;
@@ -206,12 +225,15 @@
             const week_min = Math.min(...consumiSettimanali);
             const mediaGiornaliera = consumiGiornalieri.reduce((a, b) => a + b, 0) / consumiGiornalieri.length;
             const costoTotale = costoTotaleSettimanale.reduce((a, b) => a + b, 0);
+            const coperturaVal = (consumiSettimanali.length / 52 * 100);
             
             return {
                 totale_kwh: totale_kwh.toFixed(0),
                 week_max: week_max.toFixed(1),
                 week_min: week_min.toFixed(1),
-                copertura: (consumiSettimanali.length / 52 * 100).toFixed(1),
+                copertura: coperturaVal.toFixed(1),
+                coperturaBassa: coperturaVal < 95,
+                coperturaAlta: coperturaVal > 95,
                 costoTotale: costoTotale.toFixed(0),
 
                 // inutilizzati
@@ -262,7 +284,7 @@
                 </div>
 
 
-                <div class="stat-card">
+                <div class="stat-card ${stats.coperturaBassa ? 'alert-low-coverage' : (stats.coperturaAlta ? 'alert-good-coverage' : '')}">
                     <h3>Copertura Dati</h3>
                     <div class="value">${stats.copertura}</div>
                     <div class="unit">%</div>
