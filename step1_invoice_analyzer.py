@@ -40,10 +40,10 @@ class InvoiceAnalyzer:
             "totale_bolletta": r"Totale bolletta/contratto\s+([-\d.,]+)\s*€",
         },
         FORMATO_2026: {
-            "materia_energia": r"Totale della spesa dovuta per l'offerta:\s*(?:.*?=\s*)?([-\d.,]+)\s*€",
-            "trasporto_e_contatore": r"Totale Spesa per la tariffa per l[’']uso della rete elettrica\s+([-\d.,]+)\s*€",
-            "oneri_di_sistema": r"Totale Spesa per gli oneri generali di sistema\s+([-\d.,]+)\s*€",
-            "imposte_e_iva": r"Totale Imposte e IVA\s+([-\d.,]+)\s*€?",
+            "materia_energia": r"Quota per consumi\s+[-\d.,]+\s*kWh\s+([-\d.,]+)\s*€",
+            "trasporto_e_contatore": r"Quota fissa e quota potenza\s+[-\d.,]+\s*mesi\s+([-\d.,]+)\s*€",
+            "oneri_di_sistema": r"[-\d.,]+\s*kW\s+per\s+[-\d.,]+\s*mesi\s+([-\d.,]+)\s*€",
+            "imposte_e_iva": r"Accise e IVA\s+([-\d.,]+)\s*€",
             "totale_bolletta": r"Totale bolletta\s+([-\d.,]+)\s*€",
         },
     }
@@ -60,8 +60,9 @@ class InvoiceAnalyzer:
         ],
     }
 
-    def __init__(self, verbose: int = 0):
+    def __init__(self, verbose: int = 0, dump_debug: bool = False):
         self.verbose = verbose
+        self.dump_debug = dump_debug
 
     def __italian_number_to_float_safe(self, s: str) -> float:
         """Converte una stringa con numero in formato italiano (es. '1.234,56') in float"""
@@ -144,13 +145,14 @@ class InvoiceAnalyzer:
                 
         if self.verbose > 1:
             print(f"💬 Trovate {len(sotto_bollette)} sotto-bollette in {nome_file}")
-            if self.verbose > 2:
-                for i, sb in enumerate(sotto_bollette):
-                    # scrivi il testo estratto in un file di debug
-                    debug_file = pdf_path.replace(".pdf", f"_debug_{i + 1}.txt")
-                    print(f"💬 Testo sotto-bolletta {i + 1} estratto nel file di debug: {debug_file}")
-                    with open(debug_file, "w", encoding="utf-8") as f:
-                        f.write(sb)
+
+        if self.dump_debug:
+            for i, sb in enumerate(sotto_bollette):
+                # scrivi il testo estratto in un file di debug
+                debug_file = pdf_path.replace(".pdf", f"_debug_{i + 1}.txt")
+                print(f"💬 Testo sotto-bolletta {i + 1} estratto nel file di debug: {debug_file}")
+                with open(debug_file, "w", encoding="utf-8") as f:
+                    f.write(sb)
 
         return sotto_bollette
 
@@ -424,6 +426,7 @@ def main():
     parser.add_argument("--output-summary", default="detailed", help="Scrivi in output un sommario su base annuale, o più dettagliata", choices=["detailed", "yearly", "none"])
     parser.add_argument("--summary-format", default="text", help="Formato del sommario", choices=["text", "html"])
     parser.add_argument("--verbose", type=int, help="Enable verbose output", default=0)
+    parser.add_argument("--dump-debug", help="Salva i testi estratti delle sotto-bollette in file TXT di debug", action='store_true')
     parser.add_argument("--grafici", help="Aggiungi grafici nell'output", action='store_true')
     parser.add_argument("--rinomina",  help="Rinomina i files PDF con un formato human-friendly", action='store_true')
     args = parser.parse_args()
@@ -455,7 +458,7 @@ def main():
         sys.exit(1)
 
     # Elaborazione dei PDF
-    x = InvoiceAnalyzer(verbose=args.verbose)
+    x = InvoiceAnalyzer(verbose=args.verbose, dump_debug=args.dump_debug)
     dati_bollette = []
     pdf_falliti = []
     print(f"✅ {len(pdf_list)} PDF files to analyze")
