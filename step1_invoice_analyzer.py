@@ -16,21 +16,49 @@ class InvoiceAnalyzer:
 
     INTESTAZIONE_BOLLETTA_ELETTRICA = "Bolletta energia elettrica"
     INTESTAZIONE_BOLLETTA_GAS = "Bolletta gas"
+    MARKER_BOLLETTA_ELETTRICA = [
+        "Bolletta energia elettrica",
+        "Energia elettrica",
+        "Scontrino dell’energia",
+        "Scontrino dell'energia",
+    ]
 
-    REGEX_PERIODO = r"Periodo: dal (\d{2}\.\d{2}\.\d{4}) al (\d{2}\.\d{2}\.\d{4})"
-    REGEX_SPESE_IN_EURO = {
-        "materia_energia": r"Spesa per la materia energia\s+([\d.,]+)\s*€",
-        "trasporto_e_contatore": r"Spesa per il trasporto e la gestione del contatore\s+([\d.,]+)\s*€",
-        "oneri_di_sistema": r"Spesa per oneri di sistema\s+([\d.,]+)\s*€",
-        "imposte_e_iva": r"Totale imposte e IVA\s+([\d.,]+)\s*€",
-        "totale_bolletta": r"Totale bolletta/contratto\s+([\d.,]+)\s*€"
+    FORMATO_LEGACY = "legacy"
+    FORMATO_2026 = "hera_2026"
+
+    REGEX_PERIODO = {
+        FORMATO_LEGACY: r"Periodo:\s*dal\s*(\d{2}\.\d{2}\.\d{4})\s*al\s*(\d{2}\.\d{2}\.\d{4})",
+        FORMATO_2026: r"Periodo\s+oggetto\s+di\s+fatturazione:\s*dal\s*(\d{2}\.\d{2}\.\d{4})\s*al\s*(\d{2}\.\d{2}\.\d{4})",
     }
 
-    REGEX_CONSUMI_IN_KWH = [
-        r"Consumo fatturato.*?([-\d,.]+)\s+([-\d,.]+)\s+([-\d,.]+)\s*kWh",
-        # Alcune volte il formato è leggermente diverso... proviamo con una regex alternativa
-        r"Consumo fatturato\s\(Chilowatt orari\)\n([-\d,.]+)\n([-\d,.]+)\n([-\d,.]+)\s*kWh"
-    ]
+    REGEX_SPESE_IN_EURO = {
+        FORMATO_LEGACY: {
+            "materia_energia": r"Spesa per la materia energia\s+([-\d.,]+)\s*€",
+            "trasporto_e_contatore": r"Spesa per il trasporto e la gestione del contatore\s+([-\d.,]+)\s*€",
+            "oneri_di_sistema": r"Spesa per oneri di sistema\s+([-\d.,]+)\s*€",
+            "imposte_e_iva": r"Totale imposte e IVA\s+([-\d.,]+)\s*€",
+            "totale_bolletta": r"Totale bolletta/contratto\s+([-\d.,]+)\s*€",
+        },
+        FORMATO_2026: {
+            "materia_energia": r"Totale della spesa dovuta per l'offerta:\s*(?:.*?=\s*)?([-\d.,]+)\s*€",
+            "trasporto_e_contatore": r"Totale Spesa per la tariffa per l[’']uso della rete elettrica\s+([-\d.,]+)\s*€",
+            "oneri_di_sistema": r"Totale Spesa per gli oneri generali di sistema\s+([-\d.,]+)\s*€",
+            "imposte_e_iva": r"Totale Imposte e IVA\s+([-\d.,]+)\s*€?",
+            "totale_bolletta": r"Totale bolletta\s+([-\d.,]+)\s*€",
+        },
+    }
+
+    REGEX_CONSUMI_IN_KWH = {
+        FORMATO_LEGACY: [
+            r"Consumo fatturato.*?([-\d.,]+)\s+([-\d.,]+)\s+([-\d.,]+)\s*kWh",
+            # Alcune volte il formato è leggermente diverso... proviamo con una regex alternativa
+            r"Consumo fatturato\s*\(Chilowatt\s+orari\)\s*([-\d.,]+)\s*([-\d.,]+)\s*([-\d.,]+)\s*kWh",
+        ],
+        FORMATO_2026: [
+            r"Consumo fatturato\s*\(Chilowatt\s*orari\)\s*([-\d.,]+)\s*([-\d.,]+)\s*([-\d.,]+)",
+            r"F1\s*\(kWh\)\s*F2\+F3\s*\(kWh\)\s*Totale\s*\(kWh\).*?\(\d+\s+giorni\)\s*([-\d.,]+)\s*([-\d.,]+)\s*([-\d.,]+)",
+        ],
+    }
 
     def __init__(self, verbose: int = 0):
         self.verbose = verbose
@@ -43,6 +71,29 @@ class InvoiceAnalyzer:
             if self.verbose > 0:
                 print(f"⚠️ Attenzione: impossibile convertire '{s}' in float.")
             return None
+
+    def __detect_pdf_format(self, text: str) -> str:
+        """Rileva automaticamente il formato del PDF in base ai marker testuali."""
+        if re.search(r"Periodo\s+oggetto\s+di\s+fatturazione", text, flags=re.IGNORECASE):
+            return InvoiceAnalyzer.FORMATO_2026
+        return InvoiceAnalyzer.FORMATO_LEGACY
+
+    def __search_first_match(self, regex_list: list[str], text: str):
+        for regex in regex_list:
+            m = re.search(regex, text, flags=re.IGNORECASE | re.DOTALL)
+            if m:
+                return m
+        return None
+
+    def __extract_spesa_with_fallback(self, text: str, voce_spesa: str, formato: str) -> float:
+        # Prima prova il formato rilevato, poi i regex degli altri formati come fallback.
+        ordered_formats = [formato] + [f for f in InvoiceAnalyzer.REGEX_SPESE_IN_EURO.keys() if f != formato]
+        for fmt in ordered_formats:
+            regex = InvoiceAnalyzer.REGEX_SPESE_IN_EURO[fmt][voce_spesa]
+            match = re.search(regex, text, flags=re.IGNORECASE | re.DOTALL)
+            if match:
+                return self.__italian_number_to_float_safe(match.group(1))
+        return 0.0
 
     def __estrai_testo_delle_sotto_bollette(self, pdf_path: str) -> list[str]:
         """Estrae i dati richiesti da una singola bolletta PDF Hera e ritorna una lista
@@ -57,21 +108,28 @@ class InvoiceAnalyzer:
         sotto_bollette = []
         with fitz.open(pdf_path) as doc:
             text = ""
+            collecting_electric_bill = False
             for i in range(len(doc)):
                 page_text = doc[i].get_text()
+                has_period_marker = self.__search_first_match(list(InvoiceAnalyzer.REGEX_PERIODO.values()), page_text) is not None
+                has_electricity_marker = any(marker in page_text for marker in InvoiceAnalyzer.MARKER_BOLLETTA_ELETTRICA)
 
                 # Se incontro intestazione gas → escludo
                 if InvoiceAnalyzer.INTESTAZIONE_BOLLETTA_GAS in page_text:
                     if self.verbose > 1:
                         print(f"💬 Escludo pagina {i} con intestazione GAS in {nome_file}")
                     continue # skip
-                elif InvoiceAnalyzer.INTESTAZIONE_BOLLETTA_ELETTRICA not in page_text:
+
+                # Attiva la raccolta quando troviamo marker della bolletta elettrica.
+                if has_electricity_marker or has_period_marker:
+                    collecting_electric_bill = True
+
+                if not collecting_electric_bill:
                     if self.verbose > 1:
                         print(f"💬 Escludo pagina {i} con intestazione SCONOSCIUTA in {nome_file}")
                     continue # skip
 
-                periodo_match = re.findall(InvoiceAnalyzer.REGEX_PERIODO, page_text)
-                if len(periodo_match) == 1:
+                if has_period_marker:
                     # trovato un periodo, è l'inizio di una nuova sotto-bolletta,
                     # salva il testo precedente (se esiste) come sotto-bolletta
                     if text:
@@ -98,16 +156,20 @@ class InvoiceAnalyzer:
 
     def __estrai_dati_da_sotto_bolletta(self, pdf_path: str, text: str) -> dict:
         nome_file = os.path.basename(pdf_path)
+        formato = self.__detect_pdf_format(text)
+
+        if self.verbose > 1:
+            print(f"💬 Formato PDF rilevato per {nome_file}: {formato}")
 
         # Periodo (inizio e fine)
-        periodo_match = re.findall(InvoiceAnalyzer.REGEX_PERIODO, text)
-        if len(periodo_match) > 1:
-            if self.verbose > 0:
-                print(f"⚠️ Attenzione: trovati più periodi nella bolletta {nome_file}")
-            return None  # Se troviamo più periodi, la bolletta non è valida
-        elif len(periodo_match) == 1:
-            periodo_inizio_str = periodo_match[0][0]
-            periodo_fine_str = periodo_match[0][1]
+        periodo_match = re.search(InvoiceAnalyzer.REGEX_PERIODO[formato], text, flags=re.IGNORECASE | re.DOTALL)
+        if not periodo_match:
+            # Fallback: prova i regex periodo degli altri formati.
+            periodo_match = self.__search_first_match(list(InvoiceAnalyzer.REGEX_PERIODO.values()), text)
+
+        if periodo_match:
+            periodo_inizio_str = periodo_match.group(1)
+            periodo_fine_str = periodo_match.group(2)
 
             try:
                 periodo_inizio = datetime.strptime(periodo_inizio_str, "%d.%m.%Y")
@@ -130,11 +192,15 @@ class InvoiceAnalyzer:
             return None  # Se non troviamo il periodo, la bolletta non è valida
 
         # Consumi per fasce e totale
-        consumi_match = None
-        for regex in InvoiceAnalyzer.REGEX_CONSUMI_IN_KWH:
-            consumi_match = re.search(regex, text)
-            if consumi_match:
-                break
+        consumi_match = self.__search_first_match(InvoiceAnalyzer.REGEX_CONSUMI_IN_KWH[formato], text)
+        if not consumi_match:
+            # Fallback: prova anche i regex consumi degli altri formati.
+            for fmt, regexes in InvoiceAnalyzer.REGEX_CONSUMI_IN_KWH.items():
+                if fmt == formato:
+                    continue
+                consumi_match = self.__search_first_match(regexes, text)
+                if consumi_match:
+                    break
 
         if consumi_match:
             consumo_f1 = self.__italian_number_to_float_safe(consumi_match.group(1))
@@ -157,12 +223,8 @@ class InvoiceAnalyzer:
 
         # Voci di spesa
         voci_spesa = {}
-        for voce_spesa, regex in InvoiceAnalyzer.REGEX_SPESE_IN_EURO.items():
-            match = re.search(regex, text)
-            if match:
-                voci_spesa[voce_spesa] = self.__italian_number_to_float_safe(match.group(1))
-            else:
-                voci_spesa[voce_spesa] = 0.0
+        for voce_spesa in InvoiceAnalyzer.REGEX_SPESE_IN_EURO[formato].keys():
+            voci_spesa[voce_spesa] = self.__extract_spesa_with_fallback(text, voce_spesa, formato)
 
         # Fine estrazione
         if self.verbose > 1:
