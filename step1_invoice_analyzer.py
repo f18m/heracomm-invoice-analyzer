@@ -314,12 +314,15 @@ class Tools:
         if summary_type == "detailed":
             # Stampa un sommario testuale
             df = pd.DataFrame(self.dati_bollette)
+            if "file" in df.columns:
+                df["nome_file_pdf"] = df["file"].apply(os.path.basename)
             df = df.sort_values("periodo_inizio").reset_index(drop=True)
             print("\n📄 Sommario Bollette:")
+            columns = ["nome_file_pdf", "periodo_inizio", "periodo_fine", "consumo_totale_kwh", "totale_bolletta_eur", "numero_giorni"]
             if summary_format == "html":
-                print(df.to_html(index=False))
+                print(df[columns].to_html(index=False))
             else:
-                print(df[["periodo_inizio", "periodo_fine", "consumo_totale_kwh", "totale_bolletta_eur", "numero_giorni"]].to_string(index=False))
+                print(df[columns].to_string(index=False))
         elif summary_type == "yearly":
             print("⚠️ Avviso: il sommario annuale è stato disabilitato in questo step. Usa lo step2_interpolazione.py per un sommario accurato.")
         # il sommario annuale implementato sotto è molto IMPRECISO a causa delle bollette
@@ -382,16 +385,29 @@ def main():
     # Elaborazione dei PDF
     x = InvoiceAnalyzer(verbose=args.verbose)
     dati_bollette = []
+    pdf_falliti = []
     print(f"✅ {len(pdf_list)} PDF files to analyze")
     for pdf_path in pdf_list:
-        dati = x.estrai_dati_bolletta(pdf_path)
+        try:
+            dati = x.estrai_dati_bolletta(pdf_path)
+        except Exception as e:
+            print(f"❌ Errore durante l'analisi del PDF {pdf_path}: {e}")
+            pdf_falliti.append(pdf_path)
+            continue
+
         if dati:
             for d in dati:
                 dati_bollette.append(d)
+        else:
+            print(f"❌ Nessun dato estratto da {pdf_path}: nessuna sotto-bolletta elettrica valida trovata.")
+            pdf_falliti.append(pdf_path)
 
     if not dati_bollette:
         print("❌ Nessun PDF analizzato correttamente.")
         sys.exit(1)
+
+    if pdf_falliti:
+        print(f"⚠️ PDF senza dati validi: {len(pdf_falliti)} su {len(pdf_list)}")
 
     t = Tools(dati_bollette)
 
