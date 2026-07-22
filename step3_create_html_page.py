@@ -3,6 +3,7 @@
 import argparse
 import pandas as pd
 import json
+import calendar
 from jinja2 import Environment, FileSystemLoader
 
 def load_data(file_path):
@@ -54,6 +55,49 @@ def create_html_page(df, output_file):
         f.write(output)
 
 
+def create_yearly_html_page(df, output_file):
+    """Crea una pagina HTML con un grafico annuale a doppio asse Y."""
+    df_valid = df[
+        df['consumo_settimanale_kwh'].notna() &
+        df['costo_totale_settimana_eur'].notna() &
+        df['giorni_coperti'].notna()
+    ].copy()
+
+    yearly = (
+        df_valid.groupby('anno', as_index=False)
+        .agg({
+            'costo_totale_settimana_eur': 'sum',
+            'consumo_settimanale_kwh': 'sum',
+            'giorni_coperti': 'sum'
+        })
+        .sort_values('anno')
+    )
+
+    yearly['giorni_anno'] = yearly['anno'].apply(lambda y: 366 if calendar.isleap(int(y)) else 365)
+    yearly['copertura_percento'] = (yearly['giorni_coperti'] / yearly['giorni_anno']) * 100
+
+    # Include solo anni con copertura > 90%
+    yearly = yearly[yearly['copertura_percento'] > 90].copy()
+
+    yearly_data = {
+        'anni': yearly['anno'].astype(int).tolist(),
+        'costi_totali_eur': yearly['costo_totale_settimana_eur'].round(2).tolist(),
+        'consumi_totali_kwh': yearly['consumo_settimanale_kwh'].round(2).tolist(),
+        'copertura_percento': yearly['copertura_percento'].round(1).tolist(),
+    }
+
+    env = Environment(loader=FileSystemLoader("templates"))
+    context = {
+        "yearly_json": json.dumps(yearly_data, indent=2)
+    }
+
+    template = env.get_template("html_yearly_template.j2")
+    output = template.render(context)
+
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write(output)
+
+
 def main():
     """Funzione principale"""
     # Configurazione argomenti da riga di comando
@@ -72,6 +116,11 @@ def main():
         default='bollette_hera_riepilogo_interattivo.html',
         help='Nome del file di output (default: bollette_hera_riepilogo_processato.html)'
     )
+    parser.add_argument(
+        '--output-yearly-html',
+        default='bollette_hera_riepilogo_annuale.html',
+        help='Nome del file HTML annuale (default: bollette_hera_riepilogo_annuale.html)'
+    )
     
     args = parser.parse_args()
     csv_file = args.input
@@ -83,6 +132,10 @@ def main():
         # Crea la pagina HTML
         create_html_page(df, args.output_html)
         print(f"✅ File HTML generato con successo: {args.output_html}")
+
+        # Crea la pagina HTML annuale con doppio asse Y
+        create_yearly_html_page(df, args.output_yearly_html)
+        print(f"✅ File HTML annuale generato con successo: {args.output_yearly_html}")
 
     except Exception as e:
         print(f"❌ Errore durante l'elaborazione: {e}")

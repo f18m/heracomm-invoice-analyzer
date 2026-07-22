@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Riepilogo Annuale Consumi e Costi</title>
+    <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.2em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.05em;
+            opacity: 0.92;
+        }
+
+        .chart-container {
+            padding: 30px;
+        }
+
+        #chart-yearly {
+            width: 100%;
+            height: 650px;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.6em;
+            }
+
+            #chart-yearly {
+                height: 470px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Riepilogo Annuale Energia Elettrica</h1>
+            <p>Confronto tra costo totale annuo e consumo totale annuo</p>
+        </div>
+        <div class="chart-container">
+            <div id="chart-yearly"></div>
+        </div>
+    </div>
+
+    <script>
+        const yearlyData = {{yearly_json}};
+
+        const traceCosti = {
+            x: yearlyData.anni,
+            y: yearlyData.costi_totali_eur,
+            type: 'bar',
+            name: 'Costo Totale Annuo',
+            marker: {
+                color: '#4f46e5'
+            },
+            yaxis: 'y',
+            hovertemplate: '<b>Anno %{x}</b><br>Costo totale: %{y:.2f} €<extra></extra>'
+        };
+
+        const traceConsumi = {
+            x: yearlyData.anni,
+            y: yearlyData.consumi_totali_kwh,
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'Consumo Totale Annuo',
+            line: {
+                color: '#f97316',
+                width: 4
+            },
+            marker: {
+                size: 10,
+                color: '#f97316'
+            },
+            yaxis: 'y2',
+            hovertemplate: '<b>Anno %{x}</b><br>Consumo totale: %{y:.2f} kWh<extra></extra>'
+        };
+
+        const layout = {
+            title: {
+                text: 'Costi e Consumi Totali per Anno',
+                font: { size: 24, color: '#1f2937' }
+            },
+            xaxis: {
+                title: 'Anno',
+                type: 'category',
+                tickmode: 'array',
+                tickvals: yearlyData.anni,
+                gridcolor: '#e5e7eb'
+            },
+            yaxis: {
+                title: 'Costo Totale (Euro)',
+                rangemode: 'tozero',
+                gridcolor: '#e5e7eb',
+                zerolinecolor: '#cbd5e1'
+            },
+            yaxis2: {
+                title: 'Consumo Totale (kWh)',
+                overlaying: 'y',
+                side: 'right',
+                rangemode: 'tozero'
+            },
+            hovermode: 'x unified',
+            legend: {
+                x: 0.01,
+                y: 0.99,
+                bgcolor: 'rgba(255,255,255,0.85)',
+                bordercolor: '#e5e7eb',
+                borderwidth: 1
+            },
+            plot_bgcolor: '#f8fafc',
+            paper_bgcolor: 'white',
+            margin: { t: 70, r: 90, b: 70, l: 90 }
+        };
+
+        const config = {
+            responsive: true,
+            displayModeBar: true,
+            displaylogo: false,
+            modeBarButtonsToRemove: ['lasso2d', 'select2d']
+        };
+
+        Plotly.newPlot('chart-yearly', [traceCosti, traceConsumi], layout, config);
+    </script>
+</body>
+</html>
