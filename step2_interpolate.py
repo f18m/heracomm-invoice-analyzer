@@ -5,6 +5,7 @@ import numpy as np
 from datetime import datetime, timedelta
 import argparse
 import warnings
+import calendar
 
 def load_and_process_data(csv_file: str):
     """Carica e processa i dati dal file CSV"""
@@ -29,13 +30,44 @@ def load_and_process_data(csv_file: str):
     # Informazioni sui periodi di fatturazione
     print("\nINFORMAZIONI PERIODI DI FATTURAZIONE")
     print("-" * 50)
-    df['Anno'] = df['periodo_inizio'].dt.year
-    for year in sorted(df['Anno'].unique()):
-        year_data = df[df['Anno'] == year]
+    first_year = int(df['periodo_inizio'].min().year)
+    last_year = int(df['periodo_fine'].max().year)
+    for year in range(first_year, last_year + 1):
+        year_start = datetime(year, 1, 1)
+        year_end = datetime(year, 12, 31)
+
+        year_data = df[
+            (df['periodo_inizio'] <= year_end) &
+            (df['periodo_fine'] >= year_start)
+        ]
+
+        if len(year_data) == 0:
+            continue
+
         num_periods = len(year_data)
-        sum_period_length = year_data['giorni_periodo'].sum()
-        coverage = (year_data['giorni_periodo'].sum() / 365.25) * 100
-        print(f"Anno {year}: {num_periods} periodi, durata totale {sum_period_length:.1f} giorni, copertura {coverage:.1f}%")
+        sum_period_length = 0
+        covered_days = set()
+
+        for _, row in year_data.iterrows():
+            clipped_start = max(row['periodo_inizio'], year_start)
+            clipped_end = min(row['periodo_fine'], year_end)
+            if clipped_start > clipped_end:
+                continue
+
+            giorni_intersezione = (clipped_end - clipped_start).days + 1
+            sum_period_length += giorni_intersezione
+
+            for day in pd.date_range(clipped_start, clipped_end, freq='D'):
+                covered_days.add(day.date())
+
+        days_in_year = 366 if calendar.isleap(year) else 365
+        unique_covered_days = len(covered_days)
+        coverage = (unique_covered_days / days_in_year) * 100
+
+        print(
+            f"Anno {year}: {num_periods} periodi, durata totale {sum_period_length:.1f} giorni, "
+            f"copertura {coverage:.1f}% ({unique_covered_days}/{days_in_year} giorni unici)"
+        )
 
     return df
 
