@@ -342,19 +342,26 @@ class Tools:
     def rinomina_pdfs(self) -> None:
         """Rinomina i file PDF delle bollette in base ai dati estratti."""
         temp_dict = {}
+
+        def normalize_path(path: str) -> str:
+            return os.path.normcase(os.path.normpath(path))
+
         for dati in self.dati_bollette:
-            curr_path = os.path.dirname(dati["File"])
-            old_name = os.path.basename(dati["File"])
+            source_file = dati.get("file") or dati.get("File")
+            if not source_file:
+                raise KeyError("Missing 'file' key in extracted invoice data")
+
+            curr_path = os.path.dirname(source_file)
             periodo_inizio = dati["periodo_inizio"].strftime("%Y%m%d")
             periodo_fine = dati["periodo_fine"].strftime("%Y%m%d")
             anno = dati["periodo_inizio"].year
             mese = dati["periodo_inizio"].month
-            nuovo_nome = f"{curr_path}/elettricita_{anno}_{mese:02}_{periodo_inizio}_{periodo_fine}.pdf"
+            nuovo_nome = os.path.join(curr_path, f"elettricita_{anno}_{mese:02}_{periodo_inizio}_{periodo_fine}.pdf")
 
-            if dati["File"] in temp_dict:
-                temp_dict[dati["File"]]["count"] += 1
+            if source_file in temp_dict:
+                temp_dict[source_file]["count"] += 1
             else:
-                temp_dict[dati["File"]] = {"new_name":nuovo_nome, "count":1}
+                temp_dict[source_file] = {"new_name":nuovo_nome, "count":1}
 
         for old_name, info in temp_dict.items():
             nuovo_nome = info["new_name"]
@@ -362,7 +369,10 @@ class Tools:
                 base, ext = os.path.splitext(nuovo_nome)
                 nuovo_nome = f"{base}_{info['count']}_sottobollette{ext}"
 
-            if old_name != nuovo_nome:
+            old_normalized = normalize_path(old_name)
+            new_normalized = normalize_path(nuovo_nome)
+
+            if old_normalized != new_normalized:
                 if os.path.exists(nuovo_nome):
                     print(f"⚠️ Impossibile rinominare {old_name} in {nuovo_nome}: il file di destinazione esiste già.")
                 else:
