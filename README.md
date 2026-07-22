@@ -4,6 +4,10 @@ Household bill analyzer.
 Developed for the [HERA Italian Utility](https://www.gruppohera.it/) bill format.
 Right now it only deals with **electricity** expenses. Natural gas will be added later.
 
+## Agent policy
+
+Automated agent permissions and validation-command authorization are documented in [AGENTS.md](AGENTS.md).
+
 ## How to use 
 
 1. Collect all bills you have in a single folder, in PDF format. 
